@@ -20,7 +20,7 @@ VITE_BASE_PATH=/console/ npm run build
 SPRING_PROFILES_ACTIVE=prod
 DB_HOST=127.0.0.1
 DB_NAME=wedding_platform
-DB_USERNAME=wedding
+DB_USERNAME=wedding_app
 DB_PASSWORD=replace-me
 JWT_SECRET=replace-with-at-least-32-random-bytes
 STORAGE_ROOT=/home/apps/wedding-platform/storage
@@ -43,25 +43,24 @@ STORAGE_ROOT=/home/apps/wedding-platform/storage
 
 iot 服务器只有 JDK 17，因此项目以 Java 17 为生产目标编译。
 
-域名上线前，需要在阿里云 DNS 添加：
+阿里云 DNS 当前已配置主域名：
 
 ```text
 photo.shop-hz.top      A      47.104.21.68
-www.photo.shop-hz.top  A      47.104.21.68
 ```
 
-至少必须配置主域名 `photo.shop-hz.top`。当前 Nginx 和证书已就绪，但权威 DNS 中尚无上述记录。
+`www.photo.shop-hz.top` 证书已覆盖，但只有在需要该别名时才需要额外添加同 IP 的 A 记录。
 
 ## 证书
 
 证书和私钥保留在工作站，不提交 Git。默认读取：
 
 ```text
-~/Downloads/26139856_photo.shop-hz.top_nginx/photo.shop-hz.top.pem
-~/Downloads/26139856_photo.shop-hz.top_nginx/photo.shop-hz.top.key
+~/Downloads/26141245_photo.shop-hz.top_nginx/photo.shop-hz.top.pem
+~/Downloads/26141245_photo.shop-hz.top_nginx/photo.shop-hz.top.key
 ```
 
-如果原始文件不存在，脚本会回退读取同目录下的 `26139856_photo.shop-hz.top_nginx.zip`。
+如果原始文件不存在，脚本会回退读取下载目录下的 `26141245_photo.shop-hz.top_nginx.zip`。
 部署前会检查有效期、域名和公私钥是否匹配。远端私钥权限固定为 `0600`。
 
 只校验证书和部署输入，不修改服务器：
@@ -104,3 +103,6 @@ curl -I http://photo.shop-hz.top/
 curl -I https://photo.shop-hz.top/
 curl https://photo.shop-hz.top/api/public/status
 ```
+
+截至 2026-07-17，生产服务、HTTPS、主域名解析和登录接口均已验证。首个生产管理员已经创建，
+`BOOTSTRAP_ADMIN_ENABLED` 已恢复为 `false`，环境文件中不保留临时密码。
