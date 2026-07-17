@@ -96,6 +96,11 @@ class AccountFlowTests {
                 .andExpect(jsonPath("$.setupRequired").value(true));
 
         String creatorToken = login(CREATOR_MOBILE, CREATOR_PASSWORD, true);
+        mockMvc.perform(get("/api/admin/creators")
+                        .header("Authorization", bearer(creatorToken)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCOUNT_SETUP_REQUIRED"));
+
         MockMultipartFile avatar = new MockMultipartFile(
                 "file",
                 "avatar.jpg",

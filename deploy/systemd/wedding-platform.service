@@ -1,0 +1,21 @@
+[Unit]
+Description=Wedding Platform Backend Service
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=games
+Group=games
+WorkingDirectory=/home/apps/wedding-platform/backend
+EnvironmentFile=/etc/wedding-platform/wedding-platform.env
+ExecStart=/opt/java/jdk17/bin/java -jar /home/apps/wedding-platform/backend/wedding-server.jar --server.address=127.0.0.1 --server.port=8080
+SuccessExitStatus=143
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ReadWritePaths=/home/apps/wedding-platform/storage
+
+[Install]
+WantedBy=multi-user.target

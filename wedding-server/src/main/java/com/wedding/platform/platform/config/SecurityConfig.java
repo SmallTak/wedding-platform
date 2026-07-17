@@ -2,6 +2,7 @@ package com.wedding.platform.platform.config;
 
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.wedding.platform.platform.security.AccountSetupFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,6 +23,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -41,7 +43,8 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
-            Converter<Jwt, ? extends AbstractAuthenticationToken> jwtAuthenticationConverter
+            Converter<Jwt, ? extends AbstractAuthenticationToken> jwtAuthenticationConverter,
+            AccountSetupFilter accountSetupFilter
     ) throws Exception {
         return http
                 .csrf(csrf -> csrf.disable())
@@ -58,6 +61,7 @@ public class SecurityConfig {
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter))
                         .authenticationEntryPoint((request, response, exception) ->
                                 writeSecurityError(response, 401, "UNAUTHORIZED", "Authentication required")))
+                .addFilterAfter(accountSetupFilter, BearerTokenAuthenticationFilter.class)
                 .exceptionHandling(exceptions -> exceptions
                         .accessDeniedHandler((request, response, exception) ->
                                 writeSecurityError(response, 403, "FORBIDDEN", "Permission denied")))

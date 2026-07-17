@@ -23,11 +23,84 @@ DB_NAME=wedding_platform
 DB_USERNAME=wedding
 DB_PASSWORD=replace-me
 JWT_SECRET=replace-with-at-least-32-random-bytes
-STORAGE_ROOT=/srv/wedding/storage
+STORAGE_ROOT=/home/apps/wedding-platform/storage
 ```
 
 首次部署可以临时设置 `BOOTSTRAP_ADMIN_ENABLED=true`、`BOOTSTRAP_ADMIN_MOBILE` 和
 `BOOTSTRAP_ADMIN_PASSWORD` 创建首个管理员，创建成功后关闭该开关。
 
-正式部署配置将在业务接口和图片处理链路完成后补充，避免在端口、域名、存储路径和
-备份策略尚未确定前固化环境参数。
+## iot 服务器约定
+
+- SSH 目标：`iot`。
+- 应用目录：`/home/apps/wedding-platform`。
+- 后端端口：`8080`，只由 Nginx 反向代理。
+- systemd 服务：`wedding-platform.service`。
+- Nginx：`/usr/local/nginx/sbin/nginx`。
+- Nginx 站点配置：`/usr/local/nginx/conf/conf.d/photo.shop-hz.top.conf`。
+- 证书目录：`/usr/local/nginx/conf/ssl/photo.shop-hz.top`。
+- 域名：`photo.shop-hz.top`，`www.photo.shop-hz.top` 跳转到主域名。
+- MySQL：复用参考项目所在实例，独立使用 `wedding_platform` schema 和 `wedding_app` 用户。
+
+iot 服务器只有 JDK 17，因此项目以 Java 17 为生产目标编译。
+
+域名上线前，需要在阿里云 DNS 添加：
+
+```text
+photo.shop-hz.top      A      47.104.21.68
+www.photo.shop-hz.top  A      47.104.21.68
+```
+
+至少必须配置主域名 `photo.shop-hz.top`。当前 Nginx 和证书已就绪，但权威 DNS 中尚无上述记录。
+
+## 证书
+
+证书和私钥保留在工作站，不提交 Git。默认读取：
+
+```text
+~/Downloads/26139856_photo.shop-hz.top_nginx/photo.shop-hz.top.pem
+~/Downloads/26139856_photo.shop-hz.top_nginx/photo.shop-hz.top.key
+```
+
+如果原始文件不存在，脚本会回退读取同目录下的 `26139856_photo.shop-hz.top_nginx.zip`。
+部署前会检查有效期、域名和公私钥是否匹配。远端私钥权限固定为 `0600`。
+
+只校验证书和部署输入，不修改服务器：
+
+```bash
+DRY_RUN=1 ./deploy/scripts/deploy-nginx.sh
+```
+
+只安装证书和 Nginx 配置：
+
+```bash
+./deploy/scripts/deploy-nginx.sh
+```
+
+脚本会备份现有配置，执行 Nginx 配置测试；测试失败时自动恢复，不会 reload 错误配置。
+
+## 发布命令
+
+首次部署前，在服务器创建 `/etc/wedding-platform/wedding-platform.env`，可参考
+`deploy/wedding-platform.env.example`。确认数据库和环境变量完成后执行：
+
+```bash
+./deploy/scripts/deploy-all.sh
+```
+
+也可以分开执行：
+
+```bash
+./deploy/scripts/build-all.sh
+./deploy/scripts/deploy-app.sh
+./deploy/scripts/deploy-nginx.sh
+```
+
+部署完成后的检查：
+
+```bash
+ssh iot 'systemctl status wedding-platform --no-pager'
+ssh iot '/usr/local/nginx/sbin/nginx -t'
+curl -I http://photo.shop-hz.top/
+curl -I https://photo.shop-hz.top/
+curl https://photo.shop-hz.top/api/public/status
+```
