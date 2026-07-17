@@ -3,9 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TARGET_HOST="${TARGET_HOST:-iot}"
-TLS_CERT_FILE="${TLS_CERT_FILE:-$HOME/Downloads/26139856_photo.shop-hz.top_nginx/photo.shop-hz.top.pem}"
-TLS_KEY_FILE="${TLS_KEY_FILE:-$HOME/Downloads/26139856_photo.shop-hz.top_nginx/photo.shop-hz.top.key}"
-TLS_ARCHIVE="${TLS_ARCHIVE:-$HOME/Downloads/26139856_photo.shop-hz.top_nginx.zip}"
+TLS_CERT_FILE="${TLS_CERT_FILE:-$HOME/Downloads/26141245_photo.shop-hz.top_nginx/photo.shop-hz.top.pem}"
+TLS_KEY_FILE="${TLS_KEY_FILE:-$HOME/Downloads/26141245_photo.shop-hz.top_nginx/photo.shop-hz.top.key}"
+TLS_ARCHIVE="${TLS_ARCHIVE:-$HOME/Downloads/26141245_photo.shop-hz.top_nginx.zip}"
 DRY_RUN="${DRY_RUN:-0}"
 
 require_cmd() {
