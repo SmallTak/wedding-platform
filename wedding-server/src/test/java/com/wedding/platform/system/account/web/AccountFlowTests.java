@@ -145,6 +145,16 @@ class AccountFlowTests {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    void loginAcceptsProductionOrigin() throws Exception {
+        mockMvc.perform(post("/api/auth/login")
+                        .header("Origin", "https://photo.shop-hz.top")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"mobile\":\"" + ADMIN_MOBILE + "\",\"password\":\"" + ADMIN_PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.accountType").value("ADMIN"));
+    }
+
     private String login(String mobile, String password, boolean setupRequired) throws Exception {
         String response = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)

@@ -47,10 +47,10 @@ public class LocalAdminInitializer implements ApplicationRunner {
         SystemUser admin = new SystemUser();
         admin.setMobile(mobile);
         admin.setPasswordHash(passwordEncoder.encode(password));
-        admin.setDisplayName("本地管理员");
+        admin.setDisplayName("平台管理员");
         admin.setAccountType("ADMIN");
         admin.setAccountStatus("ACTIVE");
-        admin.setMustChangePassword(false);
+        admin.setMustChangePassword(true);
         admin.setProfileCompleted(true);
         admin.setDeleted(false);
         admin.setRoles(new HashSet<>(Set.of(adminRole)));
