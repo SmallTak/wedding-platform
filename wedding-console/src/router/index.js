@@ -52,6 +52,12 @@ const router = createRouter({
           meta: { title: '图片管理', permission: '/content/collections' },
         },
         {
+          path: 'reviews',
+          name: 'reviews',
+          component: () => import('../views/ReviewCenterView.vue'),
+          meta: { title: '审核中心', permission: '/review/collections' },
+        },
+        {
           path: 'content-config',
           name: 'content-config',
           component: () => import('../views/ContentConfigView.vue'),

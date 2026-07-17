@@ -1,6 +1,7 @@
 package com.wedding.platform.content.media.persistence.repository;
 
 import com.wedding.platform.content.media.persistence.entity.CollectionPhoto;
+import com.wedding.platform.content.shared.ReviewStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,6 +14,11 @@ public interface CollectionPhotoRepository extends JpaRepository<CollectionPhoto
     List<CollectionPhoto> findAllByCollectionIdAndDeletedFalseOrderBySortOrderAscIdAsc(Long collectionId);
 
     Optional<CollectionPhoto> findByIdAndCollectionIdAndDeletedFalse(Long id, Long collectionId);
+
+    List<CollectionPhoto> findAllByCollectionIdAndDeletedFalseAndReviewStatusOrderBySortOrderAscIdAsc(
+            Long collectionId,
+            ReviewStatus reviewStatus
+    );
 
     @Query("""
             SELECT COALESCE(MAX(photo.sortOrder), -1)

@@ -58,6 +58,18 @@ public class WorkCollection extends BaseBusinessEntity {
     @Column(name = "published_by")
     private Long publishedBy;
 
+    @Column(name = "rejection_reason", length = 500)
+    private String rejectionReason;
+
+    @Column(name = "submitted_at")
+    private Instant submittedAt;
+
+    @Column(name = "reviewed_at")
+    private Instant reviewedAt;
+
+    @Column(name = "reviewed_by")
+    private Long reviewedBy;
+
     @Column(name = "offline_reason", length = 500)
     private String offlineReason;
 

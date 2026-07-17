@@ -12,6 +12,14 @@ const router = createRouter({
         title: '婚礼作品集',
       },
     },
+    {
+      path: '/collections/:collectionId',
+      name: 'collection-detail',
+      component: () => import('../views/CollectionDetailView.vue'),
+      meta: {
+        title: '婚礼作品',
+      },
+    },
   ],
   scrollBehavior() {
     return { top: 0 }
@@ -23,4 +31,3 @@ router.afterEach((to) => {
 })
 
 export default router
-

@@ -58,6 +58,9 @@ export const collectionApi = {
   assignCreators(collectionId, payload) {
     return http.put(`/admin/collections/${collectionId}/creators`, payload)
   },
+  submit(collectionId, version) {
+    return http.post(`/collections/${collectionId}/submit`, { version })
+  },
 }
 
 export const photoApi = {
@@ -82,5 +85,32 @@ export const photoApi = {
     return http.delete(`/collections/${collectionId}/photos/${photoId}`, {
       params: { version },
     })
+  },
+}
+
+export const reviewApi = {
+  list(params = {}) {
+    return http.get('/admin/reviews/collections', { params })
+  },
+  get(collectionId) {
+    return http.get(`/admin/reviews/collections/${collectionId}`)
+  },
+  reviewPhotos(collectionId, payload) {
+    return http.put(`/admin/reviews/collections/${collectionId}/photos`, payload)
+  },
+  approve(collectionId, version) {
+    return http.post(`/admin/reviews/collections/${collectionId}/approve`, { version })
+  },
+  reject(collectionId, payload) {
+    return http.post(`/admin/reviews/collections/${collectionId}/reject`, payload)
+  },
+  publish(collectionId, payload) {
+    return http.post(`/admin/reviews/collections/${collectionId}/publish`, payload)
+  },
+  offline(collectionId, payload) {
+    return http.post(`/admin/reviews/collections/${collectionId}/offline`, payload)
+  },
+  dashboard() {
+    return http.get('/admin/dashboard/overview')
   },
 }

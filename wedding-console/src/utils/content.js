@@ -21,6 +21,16 @@ const errorMessages = {
   IMAGE_DIMENSIONS_INVALID: '图片尺寸超出处理范围',
   PHOTO_ORDER_INVALID: '图片顺序已变化，请重新加载后排序',
   COVER_PHOTO_INVALID: '所选封面图片不属于当前作品集',
+  COLLECTION_PHOTOS_REQUIRED: '请先上传至少一张作品图片',
+  COLLECTION_COVER_REQUIRED: '请先设置作品集封面',
+  COLLECTION_PHOTOS_NOT_APPROVED: '作品集中仍有未通过审核的图片',
+  COLLECTION_NOT_PENDING: '当前作品集不在待审核状态',
+  COLLECTION_ALREADY_PENDING: '当前作品集已经提交审核',
+  COLLECTION_NOT_READY: '作品集尚未达到可发布状态',
+  COLLECTION_NOT_PUBLISHED: '当前作品集尚未发布',
+  REJECTION_REASON_REQUIRED: '驳回时必须填写原因',
+  PHOTO_REVIEW_SELECTION_INVALID: '请选择当前作品集中的待审核图片',
+  PASSWORD_VISIBILITY_NOT_SUPPORTED: '密码访问尚未开放，请选择公开或隐藏',
   VERSION_CONFLICT: '数据已被其他人修改，请刷新后重试',
   VALIDATION_ERROR: '提交内容不完整或格式不正确',
 }
@@ -78,12 +88,13 @@ export const reviewStatusLabels = {
 
 export const publishStatusLabels = {
   UNPUBLISHED: '未发布',
+  READY: '可发布',
   PUBLISHED: '已发布',
   OFFLINE: '已下架',
 }
 
 export function statusTone(value) {
-  if (['ACTIVE', 'APPROVED', 'PUBLISHED', 'PUBLIC'].includes(value)) return 'positive'
+  if (['ACTIVE', 'APPROVED', 'READY', 'PUBLISHED', 'PUBLIC'].includes(value)) return 'positive'
   if (['REJECTED', 'PARTIALLY_REJECTED', 'DISABLED'].includes(value)) return 'negative'
   if (['PENDING'].includes(value)) return 'warning'
   return 'neutral'

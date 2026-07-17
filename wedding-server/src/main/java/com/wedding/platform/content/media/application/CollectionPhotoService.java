@@ -118,6 +118,7 @@ public class CollectionPhotoService {
                 photoRepository.save(photo);
             }
             photoRepository.flush();
+            markContentChanged(collection, operatorId);
             bumpCollection(collection, operatorId);
             auditLogService.record(operatorId, actor.getAccountType(), "COLLECTION_PHOTO", "UPLOAD_PHOTOS",
                     "WORK_COLLECTION", collectionId, "Uploaded " + files.size() + " collection photos", ipAddress);
@@ -176,6 +177,7 @@ public class CollectionPhotoService {
             photo.setUpdatedBy(operatorId);
         }
         photoRepository.saveAll(photos);
+        markContentChanged(collection, operatorId);
         bumpCollection(collection, operatorId);
         auditLogService.record(operatorId, actor.getAccountType(), "COLLECTION_PHOTO", "REORDER_PHOTOS",
                 "WORK_COLLECTION", collectionId, "Collection photos reordered", ipAddress);
@@ -199,6 +201,7 @@ public class CollectionPhotoService {
                         "Cover photo must belong to this collection"));
 
         collection.setCoverPhotoId(request.photoId());
+        markContentChanged(collection, operatorId);
         bumpCollection(collection, operatorId);
         auditLogService.record(operatorId, actor.getAccountType(), "COLLECTION_PHOTO", "SET_COLLECTION_COVER",
                 "WORK_COLLECTION", collectionId, "Collection cover photo updated", ipAddress);
@@ -229,6 +232,8 @@ public class CollectionPhotoService {
         if (photoId.equals(collection.getCoverPhotoId())) {
             collection.setCoverPhotoId(null);
         }
+        markContentChanged(collection, operatorId);
+        recalculateAfterDeletion(collection);
         bumpCollection(collection, operatorId);
         auditLogService.record(operatorId, actor.getAccountType(), "COLLECTION_PHOTO", "DELETE_PHOTO",
                 "COLLECTION_PHOTO", photoId, "Collection photo logically deleted", ipAddress);
@@ -269,6 +274,10 @@ public class CollectionPhotoService {
                 asset.getChecksum(),
                 photo.getSortOrder(),
                 photo.getReviewStatus(),
+                photo.getRejectionReason(),
+                photo.getSubmittedAt(),
+                photo.getReviewedAt(),
+                photo.getReviewedBy(),
                 photo.getCreatedBy(),
                 photo.getCreatedAt()
         );
@@ -322,6 +331,50 @@ public class CollectionPhotoService {
         collection.setUpdatedBy(operatorId);
         collection.setUpdatedAt(Instant.now());
         collectionRepository.saveAndFlush(collection);
+    }
+
+    private void markContentChanged(WorkCollection collection, Long operatorId) {
+        List<CollectionPhoto> photos = photoRepository
+                .findAllByCollectionIdAndDeletedFalseOrderBySortOrderAscIdAsc(collection.getId());
+        photos.stream()
+                .filter(photo -> ReviewStatus.PENDING == photo.getReviewStatus())
+                .forEach(photo -> {
+                    photo.setReviewStatus(ReviewStatus.DRAFT);
+                    photo.setSubmittedAt(null);
+                    photo.setUpdatedBy(operatorId);
+                });
+        photoRepository.saveAll(photos);
+        collection.setReviewStatus(ReviewStatus.DRAFT);
+        collection.setRejectionReason(null);
+        collection.setSubmittedAt(null);
+        collection.setReviewedAt(null);
+        collection.setReviewedBy(null);
+        if (PublishStatus.READY == collection.getPublishStatus()) {
+            collection.setPublishStatus(PublishStatus.UNPUBLISHED);
+        }
+    }
+
+    private void recalculateAfterDeletion(WorkCollection collection) {
+        List<CollectionPhoto> photos = photoRepository
+                .findAllByCollectionIdAndDeletedFalseOrderBySortOrderAscIdAsc(collection.getId());
+        boolean coverAvailable = collection.getCoverPhotoId() != null
+                && photos.stream().anyMatch(photo -> photo.getId().equals(collection.getCoverPhotoId()));
+        boolean allApproved = !photos.isEmpty()
+                && photos.stream().allMatch(photo -> ReviewStatus.APPROVED == photo.getReviewStatus());
+        if (coverAvailable && allApproved) {
+            collection.setReviewStatus(ReviewStatus.APPROVED);
+            collection.setPublishStatus(PublishStatus.READY);
+            collection.setRejectionReason(null);
+            return;
+        }
+        boolean hasRejected = photos.stream().anyMatch(photo -> ReviewStatus.REJECTED == photo.getReviewStatus());
+        boolean hasPending = photos.stream().anyMatch(photo -> ReviewStatus.PENDING == photo.getReviewStatus());
+        collection.setReviewStatus(hasRejected
+                ? ReviewStatus.PARTIALLY_REJECTED
+                : hasPending ? ReviewStatus.PENDING : ReviewStatus.DRAFT);
+        if (PublishStatus.READY == collection.getPublishStatus()) {
+            collection.setPublishStatus(PublishStatus.UNPUBLISHED);
+        }
     }
 
     private String publicUrl(String relativePath) {

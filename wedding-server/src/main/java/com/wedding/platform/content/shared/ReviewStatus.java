@@ -4,5 +4,6 @@ public enum ReviewStatus {
     DRAFT,
     PENDING,
     PARTIALLY_REJECTED,
-    APPROVED
+    APPROVED,
+    REJECTED
 }

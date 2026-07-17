@@ -35,7 +35,7 @@ const navItems = [
     permission: '/content/collections',
     routes: ['collections', 'collection-photos'],
   },
-  { label: '审核中心', to: '/#review', icon: ShieldCheck, permission: '/review/collections' },
+  { label: '审核中心', to: '/reviews', icon: ShieldCheck, permission: '/review/collections', route: 'reviews' },
   { label: '创作者', to: '/creators', icon: UsersRound, permission: '/accounts/creators', route: 'creators' },
   { label: '分类标签', to: '/content-config', icon: Tags, permission: '/config/content', route: 'content-config' },
   { label: '客户反馈', to: '/', icon: MessageSquareText, permission: '/accounts/customers' },

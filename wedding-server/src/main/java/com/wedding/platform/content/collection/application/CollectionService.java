@@ -13,6 +13,8 @@ import com.wedding.platform.content.collection.persistence.repository.ContentCat
 import com.wedding.platform.content.collection.persistence.repository.ContentTagRepository;
 import com.wedding.platform.content.collection.persistence.repository.WorkCollectionRepository;
 import com.wedding.platform.content.collection.web.CollectionDtos;
+import com.wedding.platform.content.media.persistence.entity.CollectionPhoto;
+import com.wedding.platform.content.media.persistence.repository.CollectionPhotoRepository;
 import com.wedding.platform.content.project.persistence.entity.WeddingProject;
 import com.wedding.platform.content.project.persistence.repository.ProjectCreatorRepository;
 import com.wedding.platform.content.project.persistence.repository.WeddingProjectRepository;
@@ -53,6 +55,7 @@ public class CollectionService {
     private final ContentTagRepository tagRepository;
     private final WeddingProjectRepository projectRepository;
     private final ProjectCreatorRepository projectCreatorRepository;
+    private final CollectionPhotoRepository photoRepository;
     private final SystemUserRepository userRepository;
     private final AuditLogService auditLogService;
 
@@ -64,6 +67,7 @@ public class CollectionService {
             ContentTagRepository tagRepository,
             WeddingProjectRepository projectRepository,
             ProjectCreatorRepository projectCreatorRepository,
+            CollectionPhotoRepository photoRepository,
             SystemUserRepository userRepository,
             AuditLogService auditLogService
     ) {
@@ -74,6 +78,7 @@ public class CollectionService {
         this.tagRepository = tagRepository;
         this.projectRepository = projectRepository;
         this.projectCreatorRepository = projectCreatorRepository;
+        this.photoRepository = photoRepository;
         this.userRepository = userRepository;
         this.auditLogService = auditLogService;
     }
@@ -204,6 +209,7 @@ public class CollectionService {
 
         applyFields(collection, project, request.title(), request.description(), category);
         replaceTags(collectionId, tagIds);
+        markContentChanged(collection, operatorId);
         collection.setUpdatedBy(operatorId);
         collection.setUpdatedAt(Instant.now());
         collection = collectionRepository.saveAndFlush(collection);
@@ -433,6 +439,13 @@ public class CollectionService {
                 collection.getVisibility(),
                 collection.getReviewStatus(),
                 collection.getPublishStatus(),
+                collection.getRejectionReason(),
+                collection.getSubmittedAt(),
+                collection.getReviewedAt(),
+                collection.getReviewedBy(),
+                collection.getPublishedAt(),
+                collection.getPublishedBy(),
+                collection.getOfflineReason(),
                 collection.getSortOrder(),
                 collection.getFeatured(),
                 collection.getPinned(),
@@ -500,6 +513,27 @@ public class CollectionService {
         if (PublishStatus.PUBLISHED == collection.getPublishStatus()) {
             throw new ApiException(HttpStatus.CONFLICT, "COLLECTION_PUBLISHED_LOCKED",
                     "Published collection details are locked until the collection is taken offline");
+        }
+    }
+
+    private void markContentChanged(WorkCollection collection, Long operatorId) {
+        List<CollectionPhoto> photos = photoRepository
+                .findAllByCollectionIdAndDeletedFalseOrderBySortOrderAscIdAsc(collection.getId());
+        photos.stream()
+                .filter(photo -> ReviewStatus.PENDING == photo.getReviewStatus())
+                .forEach(photo -> {
+                    photo.setReviewStatus(ReviewStatus.DRAFT);
+                    photo.setSubmittedAt(null);
+                    photo.setUpdatedBy(operatorId);
+                });
+        photoRepository.saveAll(photos);
+        collection.setReviewStatus(ReviewStatus.DRAFT);
+        collection.setRejectionReason(null);
+        collection.setSubmittedAt(null);
+        collection.setReviewedAt(null);
+        collection.setReviewedBy(null);
+        if (PublishStatus.READY == collection.getPublishStatus()) {
+            collection.setPublishStatus(PublishStatus.UNPUBLISHED);
         }
     }
 

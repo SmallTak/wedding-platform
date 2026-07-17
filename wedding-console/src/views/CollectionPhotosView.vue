@@ -10,6 +10,7 @@ import {
   Images,
   RefreshCw,
   Save,
+  Send,
   Star,
   Trash2,
   Upload,
@@ -32,6 +33,7 @@ const loading = ref(false)
 const uploading = ref(false)
 const savingOrder = ref(false)
 const mutationId = ref(null)
+const submitting = ref(false)
 const uploadProgress = ref(0)
 const collection = ref(null)
 const photos = ref([])
@@ -43,6 +45,13 @@ const fileInput = ref(null)
 const publishedLocked = computed(() => collection.value?.publishStatus === 'PUBLISHED')
 const previewList = computed(() => photos.value.map((photo) => photo.previewUrl))
 const totalSize = computed(() => photos.value.reduce((sum, photo) => sum + photo.fileSize, 0))
+const canSubmit = computed(() =>
+  !publishedLocked.value
+  && !orderDirty.value
+  && photos.value.length > 0
+  && Boolean(coverPhotoId.value)
+  && !['PENDING', 'APPROVED'].includes(collection.value?.reviewStatus),
+)
 
 onMounted(loadData)
 
@@ -202,6 +211,21 @@ async function deletePhoto(photo) {
   }
 }
 
+async function submitForReview() {
+  if (!canSubmit.value) return
+  submitting.value = true
+  try {
+    const { data } = await collectionApi.submit(collectionId, collectionVersion.value)
+    collection.value = data.collection
+    applyBatch(data.photoBatch)
+    ElMessage.success('作品集已提交审核')
+  } catch (error) {
+    await handleMutationError(error, '提交审核失败')
+  } finally {
+    submitting.value = false
+  }
+}
+
 async function handleMutationError(error, fallback) {
   if (isVersionConflict(error)) {
     await loadData()
@@ -241,6 +265,14 @@ function goBack() {
         <div><span>作品集版本</span><strong>{{ collectionVersion ?? '-' }}</strong></div>
       </div>
       <div class="toolbar-commands">
+        <button
+          class="secondary-command"
+          type="button"
+          :disabled="!canSubmit || submitting"
+          @click="submitForReview"
+        >
+          <Send :size="16" />{{ submitting ? '正在提交' : '提交审核' }}
+        </button>
         <button
           v-if="orderDirty"
           class="secondary-command"
@@ -310,11 +342,15 @@ function goBack() {
           </el-image>
           <span v-if="photo.id === coverPhotoId" class="cover-label"><Star :size="12" fill="currentColor" />封面</span>
           <span class="photo-index">{{ index + 1 }}</span>
+          <span :class="['photo-review-label', statusTone(photo.reviewStatus)]">
+            {{ reviewStatusLabels[photo.reviewStatus] || photo.reviewStatus }}
+          </span>
         </div>
         <div class="photo-meta">
           <strong :title="photo.originalName">{{ photo.originalName }}</strong>
           <span>{{ photo.width }} × {{ photo.height }} · {{ formatFileSize(photo.fileSize) }}</span>
           <small>{{ formatDateTime(photo.createdAt) }}</small>
+          <small v-if="photo.rejectionReason" class="photo-rejection">{{ photo.rejectionReason }}</small>
         </div>
         <div class="photo-commands">
           <button

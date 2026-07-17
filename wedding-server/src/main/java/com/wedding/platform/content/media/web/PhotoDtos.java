@@ -44,6 +44,10 @@ public final class PhotoDtos {
             String checksum,
             Integer sortOrder,
             ReviewStatus reviewStatus,
+            String rejectionReason,
+            Instant submittedAt,
+            Instant reviewedAt,
+            Long reviewedBy,
             Long createdBy,
             Instant createdAt
     ) {
