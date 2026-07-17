@@ -1,0 +1,35 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: wedding-server
+  profiles:
+    default: local
+  servlet:
+    multipart:
+      max-file-size: 30MB
+      max-request-size: 300MB
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+app:
+  storage:
+    root: ${STORAGE_ROOT:./data/storage}
+    originals: originals
+    previews: previews
+    thumbnails: thumbnails
+
