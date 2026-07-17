@@ -94,7 +94,26 @@ public final class ReviewDtos {
     ) {
     }
 
+    public record PublishProjectRequest(
+            @NotNull(message = "Version is required")
+            @PositiveOrZero(message = "Version must not be negative")
+            Long version,
+            @NotNull(message = "Visibility is required")
+            ContentVisibility visibility
+    ) {
+    }
+
     public record OfflineCollectionRequest(
+            @NotNull(message = "Version is required")
+            @PositiveOrZero(message = "Version must not be negative")
+            Long version,
+            @NotBlank(message = "Offline reason is required")
+            @Size(max = 500, message = "Offline reason is too long")
+            String reason
+    ) {
+    }
+
+    public record OfflineProjectRequest(
             @NotNull(message = "Version is required")
             @PositiveOrZero(message = "Version must not be negative")
             Long version,

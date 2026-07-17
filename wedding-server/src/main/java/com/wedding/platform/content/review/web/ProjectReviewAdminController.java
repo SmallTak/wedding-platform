@@ -78,6 +78,26 @@ public class ProjectReviewAdminController {
         return reviewService.reject(userId(jwt), projectId, request, clientIp(servletRequest));
     }
 
+    @PostMapping("/{projectId}/publish")
+    public ReviewDtos.ProjectReviewDetailResponse publish(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long projectId,
+            @Valid @RequestBody ReviewDtos.PublishProjectRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        return reviewService.publish(userId(jwt), projectId, request, clientIp(servletRequest));
+    }
+
+    @PostMapping("/{projectId}/offline")
+    public ReviewDtos.ProjectReviewDetailResponse offline(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long projectId,
+            @Valid @RequestBody ReviewDtos.OfflineProjectRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        return reviewService.offline(userId(jwt), projectId, request, clientIp(servletRequest));
+    }
+
     private Long userId(Jwt jwt) {
         return Long.valueOf(jwt.getClaimAsString("uid"));
     }

@@ -36,10 +36,11 @@ const detailVisible = ref(false)
 const detail = ref(null)
 const selectedFieldIds = ref([])
 const selectedPhotoIds = ref([])
+const DEFAULT_REVIEW_STATUS = 'PENDING'
 
 const filters = reactive({
   keyword: '',
-  reviewStatus: null,
+  reviewStatus: DEFAULT_REVIEW_STATUS,
   publishStatus: null,
 })
 
@@ -63,6 +64,13 @@ const selectedPhotoCount = computed(() => selectedPhotoIds.value.filter(
 ).length)
 const photosFullyApproved = computed(() => isProject.value
   || detail.value?.photoBatch.photos.every((photo) => photo.reviewStatus === 'APPROVED'))
+const emptyQueueMessage = computed(() => (
+  filters.reviewStatus === DEFAULT_REVIEW_STATUS
+    && !filters.keyword.trim()
+    && !filters.publishStatus
+    ? '暂无待审核内容'
+    : '暂无符合条件的审核内容'
+))
 
 onMounted(loadQueue)
 
@@ -101,7 +109,11 @@ function runSearch() {
 }
 
 function resetFilters() {
-  Object.assign(filters, { keyword: '', reviewStatus: null, publishStatus: null })
+  Object.assign(filters, {
+    keyword: '',
+    reviewStatus: DEFAULT_REVIEW_STATUS,
+    publishStatus: null,
+  })
   page.value = 0
   loadQueue()
 }
@@ -249,51 +261,67 @@ async function rejectRemainingFields() {
   )
 }
 
-async function publishCollection() {
-  if (!detail.value?.collection) return
+async function publishTarget() {
+  if (!currentTarget.value) return
   try {
     await ElMessageBox.confirm(
-      '发布后官网将立即展示该作品集，创作者内容编辑会被锁定。',
-      '发布作品集',
+      isProject.value
+        ? '发布后项目公共资料将被锁定，管理员下架后才能继续编辑。'
+        : '发布后官网将立即展示该作品集，创作者内容编辑会被锁定。',
+      isProject.value ? '发布婚礼项目' : '发布作品集',
       { confirmButtonText: '公开发布', cancelButtonText: '取消', type: 'warning' },
     )
   } catch {
     return
   }
   await runTargetMutation(
-    () => reviewApi.publish(detail.value.collection.id, {
-      version: detail.value.collection.version,
-      visibility: 'PUBLIC',
-      featured: detail.value.collection.featured || false,
-      pinned: detail.value.collection.pinned || false,
-      sortOrder: detail.value.collection.sortOrder || 0,
-    }),
-    '作品集已公开发布',
-    '作品集发布失败',
+    () => isProject.value
+      ? reviewApi.publishProject(currentTarget.value.id, {
+          version: currentTarget.value.version,
+          visibility: 'PUBLIC',
+        })
+      : reviewApi.publish(currentTarget.value.id, {
+          version: currentTarget.value.version,
+          visibility: 'PUBLIC',
+          featured: currentTarget.value.featured || false,
+          pinned: currentTarget.value.pinned || false,
+          sortOrder: currentTarget.value.sortOrder || 0,
+        }),
+    isProject.value ? '婚礼项目已发布' : '作品集已公开发布',
+    isProject.value ? '婚礼项目发布失败' : '作品集发布失败',
   )
 }
 
-async function offlineCollection() {
-  if (!detail.value?.collection) return
+async function offlineTarget() {
+  if (!currentTarget.value) return
   let reason
   try {
-    const result = await ElMessageBox.prompt('填写下架原因', '下架作品集', {
-      confirmButtonText: '确认下架',
-      cancelButtonText: '取消',
-      inputType: 'textarea',
-      inputValidator: (value) => Boolean(value?.trim()) || '请输入下架原因',
-    })
+    const result = await ElMessageBox.prompt(
+      '填写下架原因',
+      isProject.value ? '下架婚礼项目' : '下架作品集',
+      {
+        confirmButtonText: '确认下架',
+        cancelButtonText: '取消',
+        inputType: 'textarea',
+        inputValidator: (value) => Boolean(value?.trim()) || '请输入下架原因',
+      },
+    )
     reason = result.value.trim()
   } catch {
     return
   }
   await runTargetMutation(
-    () => reviewApi.offline(detail.value.collection.id, {
-      version: detail.value.collection.version,
-      reason,
-    }),
-    '作品集已下架',
-    '作品集下架失败',
+    () => isProject.value
+      ? reviewApi.offlineProject(currentTarget.value.id, {
+          version: currentTarget.value.version,
+          reason,
+        })
+      : reviewApi.offline(currentTarget.value.id, {
+          version: currentTarget.value.version,
+          reason,
+        }),
+    isProject.value ? '婚礼项目已下架' : '作品集已下架',
+    isProject.value ? '婚礼项目下架失败' : '作品集下架失败',
   )
 }
 
@@ -421,7 +449,7 @@ async function reloadDetail() {
             </button>
           </div>
         </article>
-        <div v-if="!loading && queue.length === 0" class="empty-table">暂无符合条件的审核内容</div>
+        <div v-if="!loading && queue.length === 0" class="empty-table">{{ emptyQueueMessage }}</div>
       </div>
 
       <el-pagination
@@ -567,11 +595,11 @@ async function reloadDetail() {
             </div>
             <div>
               <button
-                v-if="!isProject && currentTarget.publishStatus === 'PUBLISHED'"
+                v-if="currentTarget.publishStatus === 'PUBLISHED'"
                 class="secondary-command"
                 type="button"
                 :disabled="mutating"
-                @click="offlineCollection"
+                @click="offlineTarget"
               ><Undo2 :size="16" />下架</button>
               <template v-else>
                 <button
@@ -589,11 +617,11 @@ async function reloadDetail() {
                   @click="approveRemainingFields"
                 ><Check :size="16" />通过剩余字段</button>
                 <button
-                  v-if="!isProject && currentTarget.publishStatus === 'READY'"
+                  v-if="currentTarget.publishStatus === 'READY'"
                   class="primary-command compact-command"
                   type="button"
                   :disabled="mutating"
-                  @click="publishCollection"
+                  @click="publishTarget"
                 ><Rocket :size="16" />公开发布</button>
               </template>
             </div>

@@ -10,6 +10,7 @@ import com.wedding.platform.content.review.persistence.entity.ReviewItemType;
 import com.wedding.platform.content.review.persistence.entity.ReviewTargetType;
 import com.wedding.platform.content.review.persistence.entity.ReviewTask;
 import com.wedding.platform.content.review.web.ReviewDtos;
+import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
 import com.wedding.platform.content.shared.ReviewStatus;
 import com.wedding.platform.platform.audit.AuditLogService;
@@ -232,6 +233,69 @@ public class ProjectReviewService {
         );
         recalculate(project, operatorId);
         auditLogService.record(operatorId, actor.getAccountType(), "PROJECT_REVIEW", "REJECT_PROJECT",
+                "WEDDING_PROJECT", projectId, request.reason().trim(), ipAddress);
+        return detail(operatorId, projectId);
+    }
+
+    @Transactional
+    public ReviewDtos.ProjectReviewDetailResponse publish(
+            Long operatorId,
+            Long projectId,
+            ReviewDtos.PublishProjectRequest request,
+            String ipAddress
+    ) {
+        SystemUser actor = getActor(operatorId);
+        requireAdmin(actor);
+        WeddingProject project = getProject(projectId);
+        requireVersion(project, request.version());
+        if (ContentVisibility.PASSWORD == request.visibility()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "PASSWORD_VISIBILITY_NOT_SUPPORTED",
+                    "Password-protected publishing is not available yet");
+        }
+        if (ReviewStatus.APPROVED != project.getReviewStatus()
+                || PublishStatus.READY != project.getPublishStatus()) {
+            throw new ApiException(HttpStatus.CONFLICT, "PROJECT_NOT_READY",
+                    "The project must be fully approved before publishing");
+        }
+        if (!reviewRevisionService.allRequiredFieldsApproved(
+                ReviewTargetType.PROJECT,
+                projectId,
+                ReviewRevisionService.PROJECT_FIELD_KEYS)) {
+            throw new ApiException(HttpStatus.CONFLICT, "PROJECT_FIELDS_NOT_APPROVED",
+                    "Every current project field must be approved before publishing");
+        }
+
+        Instant now = Instant.now();
+        project.setVisibility(request.visibility());
+        project.setPublishStatus(PublishStatus.PUBLISHED);
+        project.setPublishedAt(now);
+        project.setPublishedBy(operatorId);
+        project.setOfflineReason(null);
+        saveProject(project, operatorId);
+        auditLogService.record(operatorId, actor.getAccountType(), "PROJECT_PUBLICATION", "PUBLISH_PROJECT",
+                "WEDDING_PROJECT", projectId, "Project published as " + request.visibility(), ipAddress);
+        return detail(operatorId, projectId);
+    }
+
+    @Transactional
+    public ReviewDtos.ProjectReviewDetailResponse offline(
+            Long operatorId,
+            Long projectId,
+            ReviewDtos.OfflineProjectRequest request,
+            String ipAddress
+    ) {
+        SystemUser actor = getActor(operatorId);
+        requireAdmin(actor);
+        WeddingProject project = getProject(projectId);
+        requireVersion(project, request.version());
+        if (PublishStatus.PUBLISHED != project.getPublishStatus()) {
+            throw new ApiException(HttpStatus.CONFLICT, "PROJECT_NOT_PUBLISHED",
+                    "Only a published project can be taken offline");
+        }
+        project.setPublishStatus(PublishStatus.OFFLINE);
+        project.setOfflineReason(request.reason().trim());
+        saveProject(project, operatorId);
+        auditLogService.record(operatorId, actor.getAccountType(), "PROJECT_PUBLICATION", "OFFLINE_PROJECT",
                 "WEDDING_PROJECT", projectId, request.reason().trim(), ipAddress);
         return detail(operatorId, projectId);
     }

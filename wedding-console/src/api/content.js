@@ -137,6 +137,12 @@ export const reviewApi = {
   rejectProject(projectId, payload) {
     return http.post(`/admin/reviews/projects/${projectId}/reject`, payload)
   },
+  publishProject(projectId, payload) {
+    return http.post(`/admin/reviews/projects/${projectId}/publish`, payload)
+  },
+  offlineProject(projectId, payload) {
+    return http.post(`/admin/reviews/projects/${projectId}/offline`, payload)
+  },
   dashboard() {
     return http.get('/admin/dashboard/overview')
   },

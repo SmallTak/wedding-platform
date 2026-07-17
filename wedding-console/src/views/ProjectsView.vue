@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   CalendarDays,
   History,
@@ -8,11 +8,13 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Rocket,
   Search,
   Send,
+  Undo2,
   UsersRound,
 } from '@lucide/vue'
-import { projectApi } from '../api/content'
+import { projectApi, reviewApi } from '../api/content'
 import http from '../api/http'
 import { useAuthStore } from '../stores/auth'
 import {
@@ -32,6 +34,7 @@ const loading = ref(false)
 const saving = ref(false)
 const assigning = ref(false)
 const submittingId = ref(null)
+const publishingId = ref(null)
 const creatorsLoading = ref(false)
 const reviewLoading = ref(false)
 const projects = ref([])
@@ -255,6 +258,61 @@ async function openReviewDialog(project) {
   }
 }
 
+async function publishProject(project) {
+  try {
+    await ElMessageBox.confirm(
+      '发布后项目公共资料将被锁定，管理员下架后才能继续编辑。',
+      '发布婚礼项目',
+      { confirmButtonText: '公开发布', cancelButtonText: '取消', type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  publishingId.value = project.id
+  try {
+    await reviewApi.publishProject(project.id, {
+      version: project.version,
+      visibility: 'PUBLIC',
+    })
+    ElMessage.success('婚礼项目已发布')
+    await loadProjects()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '婚礼项目发布失败'))
+    if (isVersionConflict(error)) await loadProjects()
+  } finally {
+    publishingId.value = null
+  }
+}
+
+async function offlineProject(project) {
+  let reason
+  try {
+    const result = await ElMessageBox.prompt('填写下架原因', '下架婚礼项目', {
+      confirmButtonText: '确认下架',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputValidator: (value) => Boolean(value?.trim()) || '请输入下架原因',
+    })
+    reason = result.value.trim()
+  } catch {
+    return
+  }
+  publishingId.value = project.id
+  try {
+    await reviewApi.offlineProject(project.id, {
+      version: project.version,
+      reason,
+    })
+    ElMessage.success('婚礼项目已下架')
+    await loadProjects()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '婚礼项目下架失败'))
+    if (isVersionConflict(error)) await loadProjects()
+  } finally {
+    publishingId.value = null
+  }
+}
+
 function canSubmit(project) {
   return project.publishStatus !== 'PUBLISHED'
     && ['DRAFT', 'PARTIALLY_REJECTED'].includes(project.reviewStatus)
@@ -336,6 +394,26 @@ function creatorNames(project) {
               @click="submitProject(project)"
             >
               <Send :size="16" />
+            </button>
+            <button
+              v-if="isAdmin && project.publishStatus === 'READY'"
+              type="button"
+              aria-label="发布婚礼项目"
+              title="发布婚礼项目"
+              :disabled="publishingId === project.id"
+              @click="publishProject(project)"
+            >
+              <Rocket :size="16" />
+            </button>
+            <button
+              v-if="isAdmin && project.publishStatus === 'PUBLISHED'"
+              type="button"
+              aria-label="下架婚礼项目"
+              title="下架婚礼项目"
+              :disabled="publishingId === project.id"
+              @click="offlineProject(project)"
+            >
+              <Undo2 :size="16" />
             </button>
             <button
               type="button"

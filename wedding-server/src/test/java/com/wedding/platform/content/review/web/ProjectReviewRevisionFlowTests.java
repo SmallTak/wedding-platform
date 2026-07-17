@@ -220,7 +220,7 @@ class ProjectReviewRevisionFlowTests {
                 "$.reviewHistory.currentItems[?(@.fieldKey == 'DESCRIPTION')].id"
         );
 
-        reviewFields(
+        String finalApprovedJson = reviewFields(
                 adminToken,
                 projectId,
                 thirdRevisionVersion,
@@ -228,6 +228,7 @@ class ProjectReviewRevisionFlowTests {
                 "APPROVE",
                 null
         );
+        Number readyVersion = JsonPath.read(finalApprovedJson, "$.project.version");
 
         mockMvc.perform(get("/api/projects/{projectId}/review", projectId.longValue())
                         .header("Authorization", bearer(ownerToken)))
@@ -244,6 +245,100 @@ class ProjectReviewRevisionFlowTests {
                         .param("keyword", "Revised Project Title"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].approvedFields").value(6));
+
+        mockMvc.perform(post("/api/admin/reviews/projects/{projectId}/publish", projectId.longValue())
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "version": %d,
+                                  "visibility": "PASSWORD"
+                                }
+                                """.formatted(readyVersion.longValue())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("PASSWORD_VISIBILITY_NOT_SUPPORTED"));
+
+        mockMvc.perform(post("/api/admin/reviews/projects/{projectId}/publish", projectId.longValue())
+                        .header("Authorization", bearer(ownerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "version": %d,
+                                  "visibility": "PUBLIC"
+                                }
+                                """.formatted(readyVersion.longValue())))
+                .andExpect(status().isForbidden());
+
+        String publishedJson = mockMvc.perform(post(
+                                "/api/admin/reviews/projects/{projectId}/publish",
+                                projectId.longValue())
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "version": %d,
+                                  "visibility": "PUBLIC"
+                                }
+                                """.formatted(readyVersion.longValue())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.project.publishStatus").value("PUBLISHED"))
+                .andExpect(jsonPath("$.project.visibility").value("PUBLIC"))
+                .andExpect(jsonPath("$.project.publishedAt").isNotEmpty())
+                .andReturn().getResponse().getContentAsString();
+        Number publishedVersion = JsonPath.read(publishedJson, "$.project.version");
+
+        mockMvc.perform(put("/api/projects/{projectId}", projectId.longValue())
+                        .header("Authorization", bearer(ownerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "version": %d,
+                                  "title": "Published Project Edit",
+                                  "coupleDisplayName": "M & Q",
+                                  "eventDate": "2026-12-12",
+                                  "regionCode": "330100",
+                                  "locationText": "Hangzhou",
+                                  "description": "Published projects remain locked"
+                                }
+                                """.formatted(publishedVersion.longValue())))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("PROJECT_PUBLISHED_LOCKED"));
+
+        String offlineJson = mockMvc.perform(post(
+                                "/api/admin/reviews/projects/{projectId}/offline",
+                                projectId.longValue())
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "version": %d,
+                                  "reason": "Project information needs revision"
+                                }
+                                """.formatted(publishedVersion.longValue())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.project.publishStatus").value("OFFLINE"))
+                .andExpect(jsonPath("$.project.offlineReason")
+                        .value("Project information needs revision"))
+                .andReturn().getResponse().getContentAsString();
+        Number offlineVersion = JsonPath.read(offlineJson, "$.project.version");
+
+        mockMvc.perform(put("/api/projects/{projectId}", projectId.longValue())
+                        .header("Authorization", bearer(ownerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "version": %d,
+                                  "title": "Offline Editable Project",
+                                  "coupleDisplayName": "M & Q",
+                                  "eventDate": "2026-12-12",
+                                  "regionCode": "330100",
+                                  "locationText": "Hangzhou",
+                                  "description": "Editing is available after offline"
+                                }
+                                """.formatted(offlineVersion.longValue())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reviewStatus").value("DRAFT"))
+                .andExpect(jsonPath("$.publishStatus").value("OFFLINE"));
     }
 
     private String reviewFields(
