@@ -10,3 +10,7 @@ spring:
   flyway:
     enabled: true
 
+app:
+  storage:
+    root: ./build/test-storage
+    avatars: avatars

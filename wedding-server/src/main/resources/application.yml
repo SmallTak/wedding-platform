@@ -27,9 +27,19 @@ management:
       show-details: never
 
 app:
+  bootstrap:
+    admin:
+      enabled: ${BOOTSTRAP_ADMIN_ENABLED:false}
+      mobile: ${BOOTSTRAP_ADMIN_MOBILE:}
+      password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+  security:
+    jwt:
+      issuer: wedding-platform
+      secret: ${JWT_SECRET:wedding-platform-local-jwt-secret-change-before-production}
+      ttl: ${JWT_TTL:PT8H}
   storage:
     root: ${STORAGE_ROOT:./data/storage}
+    avatars: avatars
     originals: originals
     previews: previews
     thumbnails: thumbnails
-

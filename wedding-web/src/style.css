@@ -13,7 +13,6 @@
   --accent: #8e2f38;
   --sage: #66705d;
 }
-
 * {
   box-sizing: border-box;
 }
@@ -492,4 +491,3 @@ a {
     flex-direction: column;
   }
 }
-
