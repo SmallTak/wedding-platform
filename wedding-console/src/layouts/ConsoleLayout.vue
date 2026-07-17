@@ -27,11 +27,17 @@ const mobileMenuOpen = ref(false)
 
 const navItems = [
   { label: '工作台', to: '/', icon: LayoutDashboard, permission: '/dashboard', route: 'dashboard' },
-  { label: '婚礼项目', to: '/#projects', icon: FolderHeart, permission: '/content/projects' },
-  { label: '作品集', to: '/#projects', icon: Images, permission: '/content/collections' },
+  { label: '婚礼项目', to: '/projects', icon: FolderHeart, permission: '/content/projects', route: 'projects' },
+  {
+    label: '作品集',
+    to: '/collections',
+    icon: Images,
+    permission: '/content/collections',
+    routes: ['collections', 'collection-photos'],
+  },
   { label: '审核中心', to: '/#review', icon: ShieldCheck, permission: '/review/collections' },
   { label: '创作者', to: '/creators', icon: UsersRound, permission: '/accounts/creators', route: 'creators' },
-  { label: '分类标签', to: '/', icon: Tags, permission: '/config/content' },
+  { label: '分类标签', to: '/content-config', icon: Tags, permission: '/config/content', route: 'content-config' },
   { label: '客户反馈', to: '/', icon: MessageSquareText, permission: '/accounts/customers' },
   { label: '数据统计', to: '/', icon: BarChart3, permission: '/analytics' },
 ]
@@ -55,6 +61,7 @@ onMounted(async () => {
 })
 
 function isActive(item) {
+  if (item.routes) return item.routes.includes(route.name)
   return item.route ? route.name === item.route : false
 }
 

@@ -1,6 +1,7 @@
 package com.wedding.platform.platform.web;
 
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -31,6 +32,16 @@ public class GlobalExceptionHandler {
     ResponseEntity<ApiError> handleConflict(DataIntegrityViolationException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new ApiError("DATA_CONFLICT", "The submitted data already exists", Instant.now()));
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    ResponseEntity<ApiError> handleOptimisticLock(ObjectOptimisticLockingFailureException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiError(
+                        "VERSION_CONFLICT",
+                        "The record was updated by another user; reload it before saving",
+                        Instant.now()
+                ));
     }
 
     record ApiError(String code, String message, Instant time) {

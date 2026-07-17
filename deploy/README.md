@@ -94,6 +94,23 @@ DRY_RUN=1 ./deploy/scripts/deploy-nginx.sh
 ./deploy/scripts/deploy-nginx.sh
 ```
 
+如果代码仓库就在生产主机上，使用本机发布脚本，不需要经过 SSH：
+
+```bash
+sudo ./deploy/scripts/deploy-local.sh
+```
+
+本机发布脚本会执行后端测试和全量构建，备份当前官网、工作台、后端 JAR、systemd
+单元和 Nginx 站点配置，然后重启服务并通过正式域名验收。脚本要求生产环境文件明确设置
+`BOOTSTRAP_ADMIN_ENABLED=false`，失败时自动恢复上一版应用文件和配置。数据库迁移由
+Flyway 执行；数据库备份应使用独立备份账号或数据库平台快照，不扩大应用账号权限。
+
+已经单独完成测试或构建时，可以按实际情况跳过对应步骤：
+
+```bash
+SKIP_TEST=1 SKIP_BUILD=1 sudo ./deploy/scripts/deploy-local.sh
+```
+
 部署完成后的检查：
 
 ```bash
