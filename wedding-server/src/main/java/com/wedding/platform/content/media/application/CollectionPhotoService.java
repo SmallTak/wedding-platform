@@ -8,6 +8,8 @@ import com.wedding.platform.content.media.persistence.entity.MediaAsset;
 import com.wedding.platform.content.media.persistence.repository.CollectionPhotoRepository;
 import com.wedding.platform.content.media.persistence.repository.MediaAssetRepository;
 import com.wedding.platform.content.media.web.PhotoDtos;
+import com.wedding.platform.content.review.application.ReviewRevisionService;
+import com.wedding.platform.content.review.persistence.entity.ReviewTargetType;
 import com.wedding.platform.content.shared.PublishStatus;
 import com.wedding.platform.content.shared.ReviewStatus;
 import com.wedding.platform.platform.audit.AuditLogService;
@@ -41,6 +43,7 @@ public class CollectionPhotoService {
     private final SystemUserRepository userRepository;
     private final CollectionImageStorageService storageService;
     private final AuditLogService auditLogService;
+    private final ReviewRevisionService reviewRevisionService;
 
     public CollectionPhotoService(
             WorkCollectionRepository collectionRepository,
@@ -49,7 +52,8 @@ public class CollectionPhotoService {
             MediaAssetRepository assetRepository,
             SystemUserRepository userRepository,
             CollectionImageStorageService storageService,
-            AuditLogService auditLogService
+            AuditLogService auditLogService,
+            ReviewRevisionService reviewRevisionService
     ) {
         this.collectionRepository = collectionRepository;
         this.collectionCreatorRepository = collectionCreatorRepository;
@@ -58,6 +62,7 @@ public class CollectionPhotoService {
         this.userRepository = userRepository;
         this.storageService = storageService;
         this.auditLogService = auditLogService;
+        this.reviewRevisionService = reviewRevisionService;
     }
 
     @Transactional(readOnly = true)
@@ -83,6 +88,7 @@ public class CollectionPhotoService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "IMAGE_BATCH_INVALID",
                     "Upload between 1 and " + MAX_BATCH_FILES + " images at a time");
         }
+        prepareContentChange(collection, operatorId);
 
         List<CollectionImageStorageService.StoredImage> storedImages = new ArrayList<>();
         cleanupStoredImagesAfterRollback(storedImages);
@@ -157,6 +163,7 @@ public class CollectionPhotoService {
         requireAccess(actor, collection);
         requireEditable(collection);
         requireVersion(collection, request.version());
+        prepareContentChange(collection, operatorId);
 
         List<CollectionPhoto> photos = photoRepository
                 .findAllByCollectionIdAndDeletedFalseOrderBySortOrderAscIdAsc(collectionId);
@@ -196,6 +203,7 @@ public class CollectionPhotoService {
         requireAccess(actor, collection);
         requireEditable(collection);
         requireVersion(collection, request.version());
+        prepareContentChange(collection, operatorId);
         photoRepository.findByIdAndCollectionIdAndDeletedFalse(request.photoId(), collectionId)
                 .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "COVER_PHOTO_INVALID",
                         "Cover photo must belong to this collection"));
@@ -221,6 +229,7 @@ public class CollectionPhotoService {
         requireAccess(actor, collection);
         requireEditable(collection);
         requireVersion(collection, version);
+        prepareContentChange(collection, operatorId);
         CollectionPhoto photo = photoRepository.findByIdAndCollectionIdAndDeletedFalse(photoId, collectionId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PHOTO_NOT_FOUND",
                         "Collection photo was not found"));
@@ -229,6 +238,7 @@ public class CollectionPhotoService {
         photo.setDeletedAt(Instant.now());
         photo.setUpdatedBy(operatorId);
         photoRepository.save(photo);
+        reviewRevisionService.markPhotoRemoved(collectionId, photoId, operatorId);
         if (photoId.equals(collection.getCoverPhotoId())) {
             collection.setCoverPhotoId(null);
         }
@@ -361,7 +371,12 @@ public class CollectionPhotoService {
                 && photos.stream().anyMatch(photo -> photo.getId().equals(collection.getCoverPhotoId()));
         boolean allApproved = !photos.isEmpty()
                 && photos.stream().allMatch(photo -> ReviewStatus.APPROVED == photo.getReviewStatus());
-        if (coverAvailable && allApproved) {
+        boolean fieldsApproved = reviewRevisionService.allRequiredFieldsApproved(
+                ReviewTargetType.COLLECTION,
+                collection.getId(),
+                ReviewRevisionService.COLLECTION_FIELD_KEYS
+        );
+        if (coverAvailable && allApproved && fieldsApproved) {
             collection.setReviewStatus(ReviewStatus.APPROVED);
             collection.setPublishStatus(PublishStatus.READY);
             collection.setRejectionReason(null);
@@ -375,6 +390,17 @@ public class CollectionPhotoService {
         if (PublishStatus.READY == collection.getPublishStatus()) {
             collection.setPublishStatus(PublishStatus.UNPUBLISHED);
         }
+    }
+
+    private void prepareContentChange(WorkCollection collection, Long operatorId) {
+        List<CollectionPhoto> photos = photoRepository
+                .findAllByCollectionIdAndDeletedFalseOrderBySortOrderAscIdAsc(collection.getId());
+        reviewRevisionService.ensureCollectionBaseline(collection, photos);
+        reviewRevisionService.cancelPendingSubmission(
+                ReviewTargetType.COLLECTION,
+                collection.getId(),
+                operatorId
+        );
     }
 
     private String publicUrl(String relativePath) {

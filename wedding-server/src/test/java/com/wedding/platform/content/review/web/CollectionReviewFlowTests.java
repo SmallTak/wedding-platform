@@ -26,7 +26,9 @@ import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -35,6 +37,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.hamcrest.Matchers.hasSize;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -155,6 +158,34 @@ class CollectionReviewFlowTests {
                 .andExpect(jsonPath("$.photoBatch.photos[1].reviewStatus").value("PENDING"))
                 .andReturn().getResponse().getContentAsString();
         Number submitVersion = JsonPath.read(submitJson, "$.collection.version");
+        List<Number> fieldIds = JsonPath.read(
+                submitJson,
+                "$.reviewHistory.currentItems[?(@.itemType == 'FIELD')].id"
+        );
+
+        String approvedFieldsJson = mockMvc.perform(put(
+                                "/api/admin/reviews/collections/{collectionId}/fields",
+                                collectionId.longValue())
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "version": %d,
+                                  "reviewItemIds": [%s],
+                                  "decision": "APPROVE"
+                                }
+                                """.formatted(
+                                submitVersion.longValue(),
+                                fieldIds.stream().map(String::valueOf).collect(Collectors.joining(","))
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.collection.reviewStatus").value("PENDING"))
+                .andExpect(jsonPath(
+                        "$.reviewHistory.currentItems[?(@.itemType == 'FIELD' && @.status == 'APPROVED')]",
+                        hasSize(6)
+                ))
+                .andReturn().getResponse().getContentAsString();
+        Number approvedFieldsVersion = JsonPath.read(approvedFieldsJson, "$.collection.version");
 
         mockMvc.perform(get("/api/admin/reviews/collections")
                         .header("Authorization", bearer(adminToken))
@@ -162,6 +193,7 @@ class CollectionReviewFlowTests {
                         .param("keyword", "Published Review Story"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].pendingFields").value(0))
                 .andExpect(jsonPath("$.content[0].pendingPhotos").value(2));
 
         String approvedCoverJson = mockMvc.perform(put(
@@ -175,7 +207,7 @@ class CollectionReviewFlowTests {
                                   "photoIds": [%d],
                                   "decision": "APPROVE"
                                 }
-                                """.formatted(submitVersion.longValue(), coverPhotoId.longValue())))
+                                """.formatted(approvedFieldsVersion.longValue(), coverPhotoId.longValue())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.collection.reviewStatus").value("PENDING"))
                 .andReturn().getResponse().getContentAsString();
@@ -293,7 +325,8 @@ class CollectionReviewFlowTests {
         mockMvc.perform(get("/api/public/collections/{collectionId}", collectionId.longValue()))
                 .andExpect(status().isNotFound());
 
-        mockMvc.perform(put("/api/collections/{collectionId}", collectionId.longValue())
+        String updatedOfflineJson = mockMvc.perform(put(
+                                "/api/collections/{collectionId}", collectionId.longValue())
                         .header("Authorization", bearer(ownerToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -308,7 +341,21 @@ class CollectionReviewFlowTests {
                                 """.formatted(offlineVersion.longValue(), category.getId(), tag.getId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reviewStatus").value("DRAFT"))
-                .andExpect(jsonPath("$.publishStatus").value("OFFLINE"));
+                .andExpect(jsonPath("$.publishStatus").value("OFFLINE"))
+                .andReturn().getResponse().getContentAsString();
+        Number updatedOfflineVersion = JsonPath.read(updatedOfflineJson, "$.version");
+
+        String resubmitJson = mockMvc.perform(post(
+                                "/api/collections/{collectionId}/submit", collectionId.longValue())
+                        .header("Authorization", bearer(ownerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":" + updatedOfflineVersion + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reviewHistory.revisions.length()").value(2))
+                .andExpect(jsonPath("$.reviewHistory.revisions[0].revisionNo").value(2))
+                .andExpect(jsonPath("$.reviewHistory.revisions[0].items.length()").value(2))
+                .andReturn().getResponse().getContentAsString();
+        org.junit.jupiter.api.Assertions.assertNotNull(resubmitJson);
 
         mockMvc.perform(get("/api/admin/dashboard/overview")
                         .header("Authorization", bearer(adminToken)))

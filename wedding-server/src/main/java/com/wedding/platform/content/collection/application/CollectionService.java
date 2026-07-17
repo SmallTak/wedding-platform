@@ -18,6 +18,8 @@ import com.wedding.platform.content.media.persistence.repository.CollectionPhoto
 import com.wedding.platform.content.project.persistence.entity.WeddingProject;
 import com.wedding.platform.content.project.persistence.repository.ProjectCreatorRepository;
 import com.wedding.platform.content.project.persistence.repository.WeddingProjectRepository;
+import com.wedding.platform.content.review.application.ReviewRevisionService;
+import com.wedding.platform.content.review.persistence.entity.ReviewTargetType;
 import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
 import com.wedding.platform.content.shared.ReviewStatus;
@@ -58,6 +60,7 @@ public class CollectionService {
     private final CollectionPhotoRepository photoRepository;
     private final SystemUserRepository userRepository;
     private final AuditLogService auditLogService;
+    private final ReviewRevisionService reviewRevisionService;
 
     public CollectionService(
             WorkCollectionRepository collectionRepository,
@@ -69,7 +72,8 @@ public class CollectionService {
             ProjectCreatorRepository projectCreatorRepository,
             CollectionPhotoRepository photoRepository,
             SystemUserRepository userRepository,
-            AuditLogService auditLogService
+            AuditLogService auditLogService,
+            ReviewRevisionService reviewRevisionService
     ) {
         this.collectionRepository = collectionRepository;
         this.collectionCreatorRepository = collectionCreatorRepository;
@@ -81,6 +85,7 @@ public class CollectionService {
         this.photoRepository = photoRepository;
         this.userRepository = userRepository;
         this.auditLogService = auditLogService;
+        this.reviewRevisionService = reviewRevisionService;
     }
 
     @Transactional(readOnly = true)
@@ -190,6 +195,10 @@ public class CollectionService {
         requireEditable(collection);
         requireVersion(collection, request.version());
 
+        List<CollectionPhoto> activePhotos = photoRepository
+                .findAllByCollectionIdAndDeletedFalseOrderBySortOrderAscIdAsc(collectionId);
+        reviewRevisionService.ensureCollectionBaseline(collection, activePhotos);
+        reviewRevisionService.cancelPendingSubmission(ReviewTargetType.COLLECTION, collectionId, operatorId);
         WeddingProject project = request.projectId() == null
                 ? null
                 : getAccessibleProject(actor, request.projectId());

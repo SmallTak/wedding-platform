@@ -25,7 +25,7 @@ const errorMessage = ref('')
 const isAdmin = computed(() => auth.user?.accountType === 'ADMIN')
 const metrics = computed(() => [
   {
-    label: isAdmin.value ? '待审核作品集' : '待处理作品集',
+    label: isAdmin.value ? '待审核内容' : '待处理作品集',
     value: overview.value.pendingReviews,
     note: isAdmin.value ? '需要管理员处理' : '继续完善后可提交',
     tone: 'red',
@@ -33,7 +33,7 @@ const metrics = computed(() => [
   {
     label: '部分驳回',
     value: overview.value.rejectedCollections,
-    note: '需要修改或补充图片',
+    note: '需要修改字段或图片',
     tone: 'amber',
   },
   {

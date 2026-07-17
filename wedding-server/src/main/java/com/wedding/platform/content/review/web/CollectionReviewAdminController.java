@@ -58,6 +58,16 @@ public class CollectionReviewAdminController {
         return reviewService.reviewPhotos(userId(jwt), collectionId, request, clientIp(servletRequest));
     }
 
+    @PutMapping("/{collectionId}/fields")
+    public ReviewDtos.ReviewDetailResponse reviewFields(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long collectionId,
+            @Valid @RequestBody ReviewDtos.ReviewFieldsRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        return reviewService.reviewFields(userId(jwt), collectionId, request, clientIp(servletRequest));
+    }
+
     @PostMapping("/{collectionId}/approve")
     public ReviewDtos.ReviewDetailResponse approve(
             @AuthenticationPrincipal Jwt jwt,

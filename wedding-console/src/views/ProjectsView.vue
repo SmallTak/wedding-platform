@@ -3,11 +3,13 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   CalendarDays,
+  History,
   MapPin,
   Pencil,
   Plus,
   RefreshCw,
   Search,
+  Send,
   UsersRound,
 } from '@lucide/vue'
 import { projectApi } from '../api/content'
@@ -16,9 +18,12 @@ import { useAuthStore } from '../stores/auth'
 import {
   apiErrorMessage,
   formatDate,
+  formatDateTime,
   isVersionConflict,
   publishStatusLabels,
+  reviewItemStatusLabels,
   reviewStatusLabels,
+  reviewTaskStatusLabels,
   statusTone,
 } from '../utils/content'
 
@@ -26,7 +31,9 @@ const auth = useAuthStore()
 const loading = ref(false)
 const saving = ref(false)
 const assigning = ref(false)
+const submittingId = ref(null)
 const creatorsLoading = ref(false)
+const reviewLoading = ref(false)
 const projects = ref([])
 const creators = ref([])
 const keyword = ref('')
@@ -35,9 +42,11 @@ const size = ref(20)
 const totalElements = ref(0)
 const formDialogVisible = ref(false)
 const creatorDialogVisible = ref(false)
+const reviewDialogVisible = ref(false)
 const editingId = ref(null)
 const creatorProject = ref(null)
 const creatorUserIds = ref([])
+const reviewDetail = ref(null)
 
 const form = reactive({
   version: null,
@@ -58,6 +67,9 @@ const currentPageDrafts = computed(
 )
 const activeCreators = computed(() =>
   creators.value.filter((creator) => creator.accountStatus === 'ACTIVE'),
+)
+const currentFieldItems = computed(() =>
+  reviewDetail.value?.reviewHistory.currentItems.filter((item) => item.itemType === 'FIELD') || [],
 )
 
 onMounted(loadProjects)
@@ -214,6 +226,40 @@ async function assignCreators() {
   }
 }
 
+async function submitProject(project) {
+  submittingId.value = project.id
+  try {
+    await projectApi.submit(project.id, project.version)
+    ElMessage.success('项目已提交字段审核')
+    await loadProjects()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '项目提交审核失败'))
+    if (isVersionConflict(error)) await loadProjects()
+  } finally {
+    submittingId.value = null
+  }
+}
+
+async function openReviewDialog(project) {
+  reviewDialogVisible.value = true
+  reviewLoading.value = true
+  reviewDetail.value = null
+  try {
+    const { data } = await projectApi.review(project.id)
+    reviewDetail.value = data
+  } catch (error) {
+    reviewDialogVisible.value = false
+    ElMessage.error(apiErrorMessage(error, '项目审核记录加载失败'))
+  } finally {
+    reviewLoading.value = false
+  }
+}
+
+function canSubmit(project) {
+  return project.publishStatus !== 'PUBLISHED'
+    && ['DRAFT', 'PARTIALLY_REJECTED'].includes(project.reviewStatus)
+}
+
 function creatorNames(project) {
   if (!project.creators.length) return '暂无参与者'
   return project.creators.map((creator) => creator.displayName || `用户 ${creator.userId}`).join('、')
@@ -276,6 +322,23 @@ function creatorNames(project) {
           <div class="row-commands" data-label="操作">
             <button
               type="button"
+              aria-label="查看审核记录"
+              title="查看审核记录"
+              @click="openReviewDialog(project)"
+            >
+              <History :size="16" />
+            </button>
+            <button
+              type="button"
+              aria-label="提交项目审核"
+              title="提交项目审核"
+              :disabled="!canSubmit(project) || submittingId === project.id"
+              @click="submitProject(project)"
+            >
+              <Send :size="16" />
+            </button>
+            <button
+              type="button"
               aria-label="编辑项目"
               title="编辑项目"
               :disabled="project.publishStatus === 'PUBLISHED'"
@@ -329,6 +392,67 @@ function creatorNames(project) {
         <el-button type="primary" native-type="submit" form="project-form" :loading="saving">
           {{ editingId ? '保存修改' : '创建项目' }}
         </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="reviewDialogVisible"
+      title="项目审核记录"
+      width="760px"
+      class="management-dialog review-history-dialog"
+    >
+      <div v-loading="reviewLoading" class="review-history-content">
+        <template v-if="reviewDetail">
+          <div class="review-history-heading">
+            <div>
+              <strong>{{ reviewDetail.project.title }}</strong>
+              <small>{{ reviewDetail.project.projectCode }}</small>
+            </div>
+            <span :class="['state-chip', statusTone(reviewDetail.project.reviewStatus)]">
+              {{ reviewStatusLabels[reviewDetail.project.reviewStatus] || reviewDetail.project.reviewStatus }}
+            </span>
+          </div>
+          <div v-if="currentFieldItems.length" class="field-review-list">
+            <article v-for="item in currentFieldItems" :key="item.id" class="field-review-item">
+              <div>
+                <strong>{{ item.fieldLabel }}</strong>
+                <span>{{ item.displayValue }}</span>
+                <small v-if="item.rejectionReason">{{ item.rejectionReason }}</small>
+              </div>
+              <span :class="['state-chip', statusTone(item.status)]">
+                {{ reviewItemStatusLabels[item.status] || item.status }}
+              </span>
+            </article>
+          </div>
+          <div v-else class="empty-inline">尚未提交审核</div>
+          <el-collapse v-if="reviewDetail.reviewHistory.revisions.length" class="review-revision-list">
+            <el-collapse-item
+              v-for="revision in reviewDetail.reviewHistory.revisions"
+              :key="revision.id"
+              :name="revision.id"
+            >
+              <template #title>
+                <div class="review-revision-title">
+                  <strong>修订 {{ revision.revisionNo }}</strong>
+                  <span>{{ formatDateTime(revision.submittedAt) }}</span>
+                  <i :class="['state-chip', statusTone(revision.status)]">
+                    {{ reviewTaskStatusLabels[revision.status] || revision.status }}
+                  </i>
+                </div>
+              </template>
+              <div class="revision-item-list">
+                <div v-for="item in revision.items" :key="item.id">
+                  <span>{{ item.fieldLabel }}</span>
+                  <strong>{{ item.displayValue }}</strong>
+                  <small>{{ reviewItemStatusLabels[item.status] || item.status }}</small>
+                </div>
+              </div>
+            </el-collapse-item>
+          </el-collapse>
+        </template>
+      </div>
+      <template #footer>
+        <el-button @click="reviewDialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
 

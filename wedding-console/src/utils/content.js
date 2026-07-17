@@ -5,6 +5,9 @@ const errorMessages = {
   TAG_VERSION_CONFLICT: '标签已被其他人修改，请刷新后重试',
   PROJECT_VERSION_CONFLICT: '项目已被其他人修改，请重新打开后编辑',
   PROJECT_PUBLISHED_LOCKED: '已发布项目不能修改公共资料',
+  PROJECT_ALREADY_PENDING: '当前项目已经提交审核',
+  PROJECT_NOT_PENDING: '当前项目不在待审核状态',
+  PROJECT_FIELDS_NOT_APPROVED: '项目仍有字段未通过审核',
   PROJECT_CREATOR_INVALID: '选择的创作者不存在、已停用或账号无效',
   COLLECTION_VERSION_CONFLICT: '作品集已被其他人修改，页面将重新加载',
   COLLECTION_PUBLISHED_LOCKED: '已发布作品集不能修改内容或图片',
@@ -24,12 +27,16 @@ const errorMessages = {
   COLLECTION_PHOTOS_REQUIRED: '请先上传至少一张作品图片',
   COLLECTION_COVER_REQUIRED: '请先设置作品集封面',
   COLLECTION_PHOTOS_NOT_APPROVED: '作品集中仍有未通过审核的图片',
+  COLLECTION_FIELDS_NOT_APPROVED: '作品集仍有字段未通过审核',
   COLLECTION_NOT_PENDING: '当前作品集不在待审核状态',
   COLLECTION_ALREADY_PENDING: '当前作品集已经提交审核',
   COLLECTION_NOT_READY: '作品集尚未达到可发布状态',
   COLLECTION_NOT_PUBLISHED: '当前作品集尚未发布',
   REJECTION_REASON_REQUIRED: '驳回时必须填写原因',
   PHOTO_REVIEW_SELECTION_INVALID: '请选择当前作品集中的待审核图片',
+  REVIEW_ITEM_SELECTION_INVALID: '请选择当前版本中的待审核字段',
+  NO_PENDING_FIELDS: '当前没有待审核字段',
+  NO_REVIEW_CHANGES: '请先修改被驳回内容或新增待审内容',
   PASSWORD_VISIBILITY_NOT_SUPPORTED: '密码访问尚未开放，请选择公开或隐藏',
   VERSION_CONFLICT: '数据已被其他人修改，请刷新后重试',
   VALIDATION_ERROR: '提交内容不完整或格式不正确',
@@ -84,6 +91,20 @@ export const reviewStatusLabels = {
   PARTIALLY_REJECTED: '部分驳回',
   APPROVED: '已通过',
   REJECTED: '已驳回',
+}
+
+export const reviewItemStatusLabels = {
+  PENDING: '待审核',
+  APPROVED: '已通过',
+  REJECTED: '已驳回',
+  REMOVED: '已移除',
+}
+
+export const reviewTaskStatusLabels = {
+  PENDING: '待审核',
+  PARTIALLY_REJECTED: '部分驳回',
+  APPROVED: '已完成',
+  CANCELLED: '已撤回',
 }
 
 export const publishStatusLabels = {

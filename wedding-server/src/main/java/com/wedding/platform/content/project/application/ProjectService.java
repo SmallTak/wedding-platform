@@ -6,6 +6,8 @@ import com.wedding.platform.content.project.persistence.entity.WeddingProject;
 import com.wedding.platform.content.project.persistence.repository.ProjectCreatorRepository;
 import com.wedding.platform.content.project.persistence.repository.WeddingProjectRepository;
 import com.wedding.platform.content.project.web.ProjectDtos;
+import com.wedding.platform.content.review.application.ReviewRevisionService;
+import com.wedding.platform.content.review.persistence.entity.ReviewTargetType;
 import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
 import com.wedding.platform.content.shared.ReviewStatus;
@@ -45,18 +47,21 @@ public class ProjectService {
     private final ProjectCreatorRepository projectCreatorRepository;
     private final SystemUserRepository userRepository;
     private final AuditLogService auditLogService;
+    private final ReviewRevisionService reviewRevisionService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public ProjectService(
             WeddingProjectRepository projectRepository,
             ProjectCreatorRepository projectCreatorRepository,
             SystemUserRepository userRepository,
-            AuditLogService auditLogService
+            AuditLogService auditLogService,
+            ReviewRevisionService reviewRevisionService
     ) {
         this.projectRepository = projectRepository;
         this.projectCreatorRepository = projectCreatorRepository;
         this.userRepository = userRepository;
         this.auditLogService = auditLogService;
+        this.reviewRevisionService = reviewRevisionService;
     }
 
     @Transactional
@@ -140,8 +145,11 @@ public class ProjectService {
         requireEditable(project);
         requireVersion(project, request.version());
 
+        reviewRevisionService.ensureProjectBaseline(project);
+        reviewRevisionService.cancelPendingSubmission(ReviewTargetType.PROJECT, projectId, operatorId);
         applyProjectFields(project, request.title(), request.coupleDisplayName(), request.eventDate(),
                 request.regionCode(), request.locationText(), request.description());
+        markContentChanged(project);
         project.setUpdatedBy(operatorId);
         project = projectRepository.saveAndFlush(project);
 
@@ -268,6 +276,10 @@ public class ProjectService {
                 project.getVisibility(),
                 project.getReviewStatus(),
                 project.getPublishStatus(),
+                project.getRejectionReason(),
+                project.getSubmittedAt(),
+                project.getReviewedAt(),
+                project.getReviewedBy(),
                 project.getCreatedBy(),
                 project.getUpdatedBy(),
                 project.getCreatedAt(),
@@ -331,6 +343,17 @@ public class ProjectService {
         if (PublishStatus.PUBLISHED == project.getPublishStatus()) {
             throw new ApiException(HttpStatus.CONFLICT, "PROJECT_PUBLISHED_LOCKED",
                     "Published project details are locked until the project is taken offline");
+        }
+    }
+
+    private void markContentChanged(WeddingProject project) {
+        project.setReviewStatus(ReviewStatus.DRAFT);
+        project.setRejectionReason(null);
+        project.setSubmittedAt(null);
+        project.setReviewedAt(null);
+        project.setReviewedBy(null);
+        if (PublishStatus.READY == project.getPublishStatus()) {
+            project.setPublishStatus(PublishStatus.UNPUBLISHED);
         }
     }
 

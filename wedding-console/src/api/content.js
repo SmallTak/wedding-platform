@@ -16,6 +16,12 @@ export const projectApi = {
   assignCreators(projectId, payload) {
     return http.put(`/admin/projects/${projectId}/creators`, payload)
   },
+  submit(projectId, version) {
+    return http.post(`/projects/${projectId}/submit`, { version })
+  },
+  review(projectId) {
+    return http.get(`/projects/${projectId}/review`)
+  },
 }
 
 export const contentConfigApi = {
@@ -61,6 +67,9 @@ export const collectionApi = {
   submit(collectionId, version) {
     return http.post(`/collections/${collectionId}/submit`, { version })
   },
+  review(collectionId) {
+    return http.get(`/collections/${collectionId}/review`)
+  },
 }
 
 export const photoApi = {
@@ -98,6 +107,9 @@ export const reviewApi = {
   reviewPhotos(collectionId, payload) {
     return http.put(`/admin/reviews/collections/${collectionId}/photos`, payload)
   },
+  reviewFields(collectionId, payload) {
+    return http.put(`/admin/reviews/collections/${collectionId}/fields`, payload)
+  },
   approve(collectionId, version) {
     return http.post(`/admin/reviews/collections/${collectionId}/approve`, { version })
   },
@@ -109,6 +121,21 @@ export const reviewApi = {
   },
   offline(collectionId, payload) {
     return http.post(`/admin/reviews/collections/${collectionId}/offline`, payload)
+  },
+  listProjects(params = {}) {
+    return http.get('/admin/reviews/projects', { params })
+  },
+  getProject(projectId) {
+    return http.get(`/admin/reviews/projects/${projectId}`)
+  },
+  reviewProjectFields(projectId, payload) {
+    return http.put(`/admin/reviews/projects/${projectId}/fields`, payload)
+  },
+  approveProject(projectId, version) {
+    return http.post(`/admin/reviews/projects/${projectId}/approve`, { version })
+  },
+  rejectProject(projectId, payload) {
+    return http.post(`/admin/reviews/projects/${projectId}/reject`, payload)
   },
   dashboard() {
     return http.get('/admin/dashboard/overview')

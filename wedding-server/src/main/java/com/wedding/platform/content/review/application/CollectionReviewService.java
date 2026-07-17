@@ -10,7 +10,12 @@ import com.wedding.platform.content.media.persistence.entity.CollectionPhoto;
 import com.wedding.platform.content.media.persistence.entity.MediaAsset;
 import com.wedding.platform.content.media.persistence.repository.CollectionPhotoRepository;
 import com.wedding.platform.content.media.persistence.repository.MediaAssetRepository;
+import com.wedding.platform.content.project.persistence.repository.WeddingProjectRepository;
 import com.wedding.platform.content.review.web.ReviewDtos;
+import com.wedding.platform.content.review.persistence.entity.ReviewItem;
+import com.wedding.platform.content.review.persistence.entity.ReviewItemStatus;
+import com.wedding.platform.content.review.persistence.entity.ReviewItemType;
+import com.wedding.platform.content.review.persistence.entity.ReviewTargetType;
 import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
 import com.wedding.platform.content.shared.ReviewStatus;
@@ -40,34 +45,40 @@ public class CollectionReviewService {
     private final CollectionPhotoRepository photoRepository;
     private final MediaAssetRepository assetRepository;
     private final ContentCategoryRepository categoryRepository;
+    private final WeddingProjectRepository projectRepository;
     private final SystemUserRepository userRepository;
     private final com.wedding.platform.content.collection.persistence.repository.CollectionCreatorRepository
             collectionCreatorRepository;
     private final CollectionService collectionService;
     private final CollectionPhotoService photoService;
     private final AuditLogService auditLogService;
+    private final ReviewRevisionService reviewRevisionService;
 
     public CollectionReviewService(
             WorkCollectionRepository collectionRepository,
             CollectionPhotoRepository photoRepository,
             MediaAssetRepository assetRepository,
             ContentCategoryRepository categoryRepository,
+            WeddingProjectRepository projectRepository,
             SystemUserRepository userRepository,
             com.wedding.platform.content.collection.persistence.repository.CollectionCreatorRepository
                     collectionCreatorRepository,
             CollectionService collectionService,
             CollectionPhotoService photoService,
-            AuditLogService auditLogService
+            AuditLogService auditLogService,
+            ReviewRevisionService reviewRevisionService
     ) {
         this.collectionRepository = collectionRepository;
         this.photoRepository = photoRepository;
         this.assetRepository = assetRepository;
         this.categoryRepository = categoryRepository;
+        this.projectRepository = projectRepository;
         this.userRepository = userRepository;
         this.collectionCreatorRepository = collectionCreatorRepository;
         this.collectionService = collectionService;
         this.photoService = photoService;
         this.auditLogService = auditLogService;
+        this.reviewRevisionService = reviewRevisionService;
     }
 
     @Transactional
@@ -89,6 +100,7 @@ public class CollectionReviewService {
 
         List<CollectionPhoto> photos = activePhotos(collectionId);
         requireSubmissionReady(collection, photos);
+        reviewRevisionService.submitCollection(collection, photos, operatorId);
         Instant now = Instant.now();
         for (CollectionPhoto photo : photos) {
             if (ReviewStatus.DRAFT == photo.getReviewStatus()
@@ -103,8 +115,16 @@ public class CollectionReviewService {
         }
         photoRepository.saveAll(photos);
 
-        collection.setReviewStatus(ReviewStatus.PENDING);
-        collection.setRejectionReason(null);
+        List<ReviewItem> currentFields = reviewRevisionService.currentItems(
+                ReviewTargetType.COLLECTION, collectionId, ReviewItemType.FIELD);
+        ReviewItem rejectedField = currentFields.stream()
+                .filter(item -> ReviewItemStatus.REJECTED == item.getStatus())
+                .findFirst()
+                .orElse(null);
+        collection.setReviewStatus(rejectedField == null
+                ? ReviewStatus.PENDING
+                : ReviewStatus.PARTIALLY_REJECTED);
+        collection.setRejectionReason(rejectedField == null ? null : rejectedField.getRejectionReason());
         collection.setSubmittedAt(now);
         collection.setReviewedAt(null);
         collection.setReviewedBy(null);
@@ -149,20 +169,18 @@ public class CollectionReviewService {
         );
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public ReviewDtos.ReviewDetailResponse detail(Long operatorId, Long collectionId) {
         SystemUser actor = getActor(operatorId);
         WorkCollection collection = getCollection(collectionId);
-        if ("ADMIN".equals(actor.getAccountType())) {
-            return new ReviewDtos.ReviewDetailResponse(
-                    collectionService.getCollection(operatorId, collectionId),
-                    photoService.listPhotos(operatorId, collectionId)
-            );
+        if (!"ADMIN".equals(actor.getAccountType())) {
+            requireAccess(actor, collection);
         }
-        requireAccess(actor, collection);
+        reviewRevisionService.ensureCollectionBaseline(collection, activePhotos(collectionId));
         return new ReviewDtos.ReviewDetailResponse(
                 collectionService.getCollection(operatorId, collectionId),
-                photoService.listPhotos(operatorId, collectionId)
+                photoService.listPhotos(operatorId, collectionId),
+                reviewRevisionService.history(ReviewTargetType.COLLECTION, collectionId)
         );
     }
 
@@ -177,7 +195,9 @@ public class CollectionReviewService {
         requireAdmin(actor);
         WorkCollection collection = getCollection(collectionId);
         requireVersion(collection, request.version());
-        if (ReviewStatus.PENDING != collection.getReviewStatus()) {
+        reviewRevisionService.ensureCollectionBaseline(collection, activePhotos(collectionId));
+        if (ReviewStatus.PENDING != collection.getReviewStatus()
+                && ReviewStatus.PARTIALLY_REJECTED != collection.getReviewStatus()) {
             throw new ApiException(HttpStatus.CONFLICT, "COLLECTION_NOT_PENDING",
                     "Only a pending collection can receive photo review decisions");
         }
@@ -203,6 +223,33 @@ public class CollectionReviewService {
                 ? ReviewStatus.APPROVED
                 : ReviewStatus.REJECTED;
         String reason = targetStatus == ReviewStatus.REJECTED ? request.reason().trim() : null;
+        Map<Long, ReviewItem> reviewItemsByPhotoId = reviewRevisionService.currentItems(
+                        ReviewTargetType.COLLECTION,
+                        collectionId,
+                        ReviewItemType.PHOTO
+                ).stream()
+                .collect(java.util.stream.Collectors.toMap(ReviewItem::getBusinessId, item -> item));
+        List<Long> reviewItemIds = selected.stream()
+                .map(CollectionPhoto::getId)
+                .map(reviewItemsByPhotoId::get)
+                .filter(item -> item != null && ReviewItemStatus.PENDING == item.getStatus())
+                .map(ReviewItem::getId)
+                .toList();
+        if (reviewItemIds.size() != selected.size()) {
+            throw new ApiException(HttpStatus.CONFLICT, "PHOTO_REVIEW_REVISION_MISSING",
+                    "Reload the collection because its current photo review revision is incomplete");
+        }
+        reviewRevisionService.reviewItems(
+                ReviewTargetType.COLLECTION,
+                collectionId,
+                ReviewItemType.PHOTO,
+                reviewItemIds,
+                ReviewDtos.PhotoDecision.APPROVE == request.decision()
+                        ? ReviewDtos.ReviewDecision.APPROVE
+                        : ReviewDtos.ReviewDecision.REJECT,
+                reason,
+                operatorId
+        );
         for (CollectionPhoto photo : selected) {
             photo.setReviewStatus(targetStatus);
             photo.setRejectionReason(reason);
@@ -222,6 +269,45 @@ public class CollectionReviewService {
     }
 
     @Transactional
+    public ReviewDtos.ReviewDetailResponse reviewFields(
+            Long operatorId,
+            Long collectionId,
+            ReviewDtos.ReviewFieldsRequest request,
+            String ipAddress
+    ) {
+        SystemUser actor = getActor(operatorId);
+        requireAdmin(actor);
+        WorkCollection collection = getCollection(collectionId);
+        requireVersion(collection, request.version());
+        reviewRevisionService.ensureCollectionBaseline(collection, activePhotos(collectionId));
+        if (ReviewStatus.PENDING != collection.getReviewStatus()
+                && ReviewStatus.PARTIALLY_REJECTED != collection.getReviewStatus()) {
+            throw new ApiException(HttpStatus.CONFLICT, "COLLECTION_NOT_PENDING",
+                    "Only a submitted collection can receive field review decisions");
+        }
+        reviewRevisionService.reviewItems(
+                ReviewTargetType.COLLECTION,
+                collectionId,
+                ReviewItemType.FIELD,
+                request.reviewItemIds(),
+                request.decision(),
+                request.reason(),
+                operatorId
+        );
+        recalculateCollection(collection, operatorId, Instant.now());
+        auditLogService.record(operatorId, actor.getAccountType(), "COLLECTION_REVIEW",
+                request.decision() == ReviewDtos.ReviewDecision.APPROVE
+                        ? "APPROVE_COLLECTION_FIELDS"
+                        : "REJECT_COLLECTION_FIELDS",
+                "WORK_COLLECTION", collectionId,
+                request.decision() == ReviewDtos.ReviewDecision.APPROVE
+                        ? "Approved " + request.reviewItemIds().size() + " collection fields"
+                        : request.reason().trim(),
+                ipAddress);
+        return detail(operatorId, collectionId);
+    }
+
+    @Transactional
     public ReviewDtos.ReviewDetailResponse approveCollection(
             Long operatorId,
             Long collectionId,
@@ -234,9 +320,30 @@ public class CollectionReviewService {
         requireVersion(collection, request.version());
         List<CollectionPhoto> photos = activePhotos(collectionId);
         requireSubmissionReady(collection, photos);
+        reviewRevisionService.ensureCollectionBaseline(collection, photos);
         if (photos.stream().anyMatch(photo -> ReviewStatus.APPROVED != photo.getReviewStatus())) {
             throw new ApiException(HttpStatus.CONFLICT, "COLLECTION_PHOTOS_NOT_APPROVED",
                     "Every active photo must be approved before the collection can be approved");
+        }
+        List<ReviewItem> pendingFields = reviewRevisionService.currentItems(
+                        ReviewTargetType.COLLECTION, collectionId, ReviewItemType.FIELD).stream()
+                .filter(item -> ReviewItemStatus.PENDING == item.getStatus())
+                .toList();
+        if (!pendingFields.isEmpty()) {
+            reviewRevisionService.reviewAllPendingFields(
+                    ReviewTargetType.COLLECTION,
+                    collectionId,
+                    ReviewDtos.ReviewDecision.APPROVE,
+                    null,
+                    operatorId
+            );
+        }
+        if (!reviewRevisionService.allRequiredFieldsApproved(
+                ReviewTargetType.COLLECTION,
+                collectionId,
+                ReviewRevisionService.COLLECTION_FIELD_KEYS)) {
+            throw new ApiException(HttpStatus.CONFLICT, "COLLECTION_FIELDS_NOT_APPROVED",
+                    "Every current collection field must be approved before the collection can be approved");
         }
         Instant now = Instant.now();
         approveCollectionState(collection, operatorId, now);
@@ -256,10 +363,19 @@ public class CollectionReviewService {
         requireAdmin(actor);
         WorkCollection collection = getCollection(collectionId);
         requireVersion(collection, request.version());
-        if (ReviewStatus.PENDING != collection.getReviewStatus()) {
+        reviewRevisionService.ensureCollectionBaseline(collection, activePhotos(collectionId));
+        if (ReviewStatus.PENDING != collection.getReviewStatus()
+                && ReviewStatus.PARTIALLY_REJECTED != collection.getReviewStatus()) {
             throw new ApiException(HttpStatus.CONFLICT, "COLLECTION_NOT_PENDING",
                     "Only a pending collection can be rejected");
         }
+        reviewRevisionService.reviewAllPendingFields(
+                ReviewTargetType.COLLECTION,
+                collectionId,
+                ReviewDtos.ReviewDecision.REJECT,
+                request.reason(),
+                operatorId
+        );
         collection.setReviewStatus(ReviewStatus.PARTIALLY_REJECTED);
         collection.setRejectionReason(request.reason().trim());
         collection.setReviewedAt(Instant.now());
@@ -295,6 +411,13 @@ public class CollectionReviewService {
         if (photos.stream().anyMatch(photo -> ReviewStatus.APPROVED != photo.getReviewStatus())) {
             throw new ApiException(HttpStatus.CONFLICT, "COLLECTION_PHOTOS_NOT_APPROVED",
                     "Every active photo must be approved before publishing");
+        }
+        if (!reviewRevisionService.allRequiredFieldsApproved(
+                ReviewTargetType.COLLECTION,
+                collectionId,
+                ReviewRevisionService.COLLECTION_FIELD_KEYS)) {
+            throw new ApiException(HttpStatus.CONFLICT, "COLLECTION_FIELDS_NOT_APPROVED",
+                    "Every current collection field must be approved before publishing");
         }
 
         Instant now = Instant.now();
@@ -345,8 +468,10 @@ public class CollectionReviewService {
                 .map(this::toQueueItem)
                 .toList();
         return new ReviewDtos.DashboardOverviewResponse(
-                collectionRepository.countByDeletedFalseAndReviewStatus(ReviewStatus.PENDING),
-                collectionRepository.countByDeletedFalseAndReviewStatus(ReviewStatus.PARTIALLY_REJECTED),
+                collectionRepository.countByDeletedFalseAndReviewStatus(ReviewStatus.PENDING)
+                        + projectRepository.countByDeletedFalseAndReviewStatus(ReviewStatus.PENDING),
+                collectionRepository.countByDeletedFalseAndReviewStatus(ReviewStatus.PARTIALLY_REJECTED)
+                        + projectRepository.countByDeletedFalseAndReviewStatus(ReviewStatus.PARTIALLY_REJECTED),
                 collectionRepository.countByDeletedFalseAndPublishStatus(PublishStatus.READY),
                 collectionRepository.countByDeletedFalseAndPublishStatus(PublishStatus.PUBLISHED),
                 recent
@@ -355,10 +480,25 @@ public class CollectionReviewService {
 
     private void recalculateCollection(WorkCollection collection, Long operatorId, Instant reviewedAt) {
         List<CollectionPhoto> photos = activePhotos(collection.getId());
-        if (photos.stream().anyMatch(photo -> ReviewStatus.PENDING == photo.getReviewStatus())) {
-            collection.setReviewStatus(ReviewStatus.PENDING);
-        } else if (photos.stream().anyMatch(photo -> ReviewStatus.REJECTED == photo.getReviewStatus())) {
+        List<ReviewItem> fields = reviewRevisionService.currentItems(
+                ReviewTargetType.COLLECTION, collection.getId(), ReviewItemType.FIELD);
+        boolean hasPendingFields = fields.stream()
+                .anyMatch(item -> ReviewItemStatus.PENDING == item.getStatus());
+        boolean hasRejectedFields = fields.stream()
+                .anyMatch(item -> ReviewItemStatus.REJECTED == item.getStatus());
+        if (photos.stream().anyMatch(photo -> ReviewStatus.REJECTED == photo.getReviewStatus())
+                || hasRejectedFields) {
             collection.setReviewStatus(ReviewStatus.PARTIALLY_REJECTED);
+            collection.setRejectionReason(fields.stream()
+                    .filter(item -> ReviewItemStatus.REJECTED == item.getStatus())
+                    .map(ReviewItem::getRejectionReason)
+                    .filter(StringUtils::hasText)
+                    .findFirst()
+                    .orElse(null));
+        } else if (photos.stream().anyMatch(photo -> ReviewStatus.PENDING == photo.getReviewStatus())
+                || hasPendingFields) {
+            collection.setReviewStatus(ReviewStatus.PENDING);
+            collection.setRejectionReason(null);
         } else {
             approveCollectionState(collection, operatorId, reviewedAt);
             return;
@@ -379,6 +519,8 @@ public class CollectionReviewService {
 
     private ReviewDtos.ReviewQueueItem toQueueItem(WorkCollection collection) {
         List<CollectionPhoto> photos = activePhotos(collection.getId());
+        List<ReviewItem> fields = reviewRevisionService.currentItems(
+                ReviewTargetType.COLLECTION, collection.getId(), ReviewItemType.FIELD);
         String categoryName = categoryRepository.findById(collection.getCategoryId())
                 .map(ContentCategory::getName)
                 .orElse("未分类");
@@ -406,6 +548,9 @@ public class CollectionReviewService {
                 collection.getSubmittedAt(),
                 collection.getUpdatedAt(),
                 collection.getVersion(),
+                countItemStatus(fields, ReviewItemStatus.PENDING),
+                countItemStatus(fields, ReviewItemStatus.REJECTED),
+                countItemStatus(fields, ReviewItemStatus.APPROVED),
                 photos.size(),
                 countStatus(photos, ReviewStatus.PENDING),
                 countStatus(photos, ReviewStatus.REJECTED),
@@ -415,6 +560,10 @@ public class CollectionReviewService {
 
     private long countStatus(List<CollectionPhoto> photos, ReviewStatus status) {
         return photos.stream().filter(photo -> status == photo.getReviewStatus()).count();
+    }
+
+    private long countItemStatus(List<ReviewItem> items, ReviewItemStatus status) {
+        return items.stream().filter(item -> status == item.getStatus()).count();
     }
 
     private void requireSubmissionReady(WorkCollection collection, List<CollectionPhoto> photos) {

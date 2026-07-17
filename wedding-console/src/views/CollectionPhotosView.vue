@@ -6,6 +6,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  History,
   ImagePlus,
   Images,
   RefreshCw,
@@ -22,7 +23,9 @@ import {
   formatFileSize,
   isVersionConflict,
   publishStatusLabels,
+  reviewItemStatusLabels,
   reviewStatusLabels,
+  reviewTaskStatusLabels,
   statusTone,
 } from '../utils/content'
 
@@ -34,6 +37,7 @@ const uploading = ref(false)
 const savingOrder = ref(false)
 const mutationId = ref(null)
 const submitting = ref(false)
+const reviewLoading = ref(false)
 const uploadProgress = ref(0)
 const collection = ref(null)
 const photos = ref([])
@@ -41,6 +45,8 @@ const collectionVersion = ref(null)
 const coverPhotoId = ref(null)
 const orderDirty = ref(false)
 const fileInput = ref(null)
+const reviewDialogVisible = ref(false)
+const reviewDetail = ref(null)
 
 const publishedLocked = computed(() => collection.value?.publishStatus === 'PUBLISHED')
 const previewList = computed(() => photos.value.map((photo) => photo.previewUrl))
@@ -51,6 +57,9 @@ const canSubmit = computed(() =>
   && photos.value.length > 0
   && Boolean(coverPhotoId.value)
   && !['PENDING', 'APPROVED'].includes(collection.value?.reviewStatus),
+)
+const currentFieldItems = computed(() =>
+  reviewDetail.value?.reviewHistory.currentItems.filter((item) => item.itemType === 'FIELD') || [],
 )
 
 onMounted(loadData)
@@ -226,6 +235,21 @@ async function submitForReview() {
   }
 }
 
+async function openReviewDialog() {
+  reviewDialogVisible.value = true
+  reviewLoading.value = true
+  reviewDetail.value = null
+  try {
+    const { data } = await collectionApi.review(collectionId)
+    reviewDetail.value = data
+  } catch (error) {
+    reviewDialogVisible.value = false
+    ElMessage.error(apiErrorMessage(error, '作品集审核记录加载失败'))
+  } finally {
+    reviewLoading.value = false
+  }
+}
+
 async function handleMutationError(error, fallback) {
   if (isVersionConflict(error)) {
     await loadData()
@@ -265,6 +289,9 @@ function goBack() {
         <div><span>作品集版本</span><strong>{{ collectionVersion ?? '-' }}</strong></div>
       </div>
       <div class="toolbar-commands">
+        <button class="secondary-command" type="button" @click="openReviewDialog">
+          <History :size="16" />审核记录
+        </button>
         <button
           class="secondary-command"
           type="button"
@@ -406,5 +433,66 @@ function goBack() {
         <Upload :size="16" />上传第一批图片
       </button>
     </section>
+
+    <el-dialog
+      v-model="reviewDialogVisible"
+      title="作品集审核记录"
+      width="780px"
+      class="management-dialog review-history-dialog"
+    >
+      <div v-loading="reviewLoading" class="review-history-content">
+        <template v-if="reviewDetail">
+          <div class="review-history-heading">
+            <div>
+              <strong>{{ reviewDetail.collection.title }}</strong>
+              <small>共 {{ reviewDetail.photoBatch.photos.length }} 张图片</small>
+            </div>
+            <span :class="['state-chip', statusTone(reviewDetail.collection.reviewStatus)]">
+              {{ reviewStatusLabels[reviewDetail.collection.reviewStatus] || reviewDetail.collection.reviewStatus }}
+            </span>
+          </div>
+          <div v-if="currentFieldItems.length" class="field-review-list">
+            <article v-for="item in currentFieldItems" :key="item.id" class="field-review-item">
+              <div>
+                <strong>{{ item.fieldLabel }}</strong>
+                <span>{{ item.displayValue }}</span>
+                <small v-if="item.rejectionReason">{{ item.rejectionReason }}</small>
+              </div>
+              <span :class="['state-chip', statusTone(item.status)]">
+                {{ reviewItemStatusLabels[item.status] || item.status }}
+              </span>
+            </article>
+          </div>
+          <div v-else class="empty-inline">尚未提交审核</div>
+          <el-collapse v-if="reviewDetail.reviewHistory.revisions.length" class="review-revision-list">
+            <el-collapse-item
+              v-for="revision in reviewDetail.reviewHistory.revisions"
+              :key="revision.id"
+              :name="revision.id"
+            >
+              <template #title>
+                <div class="review-revision-title">
+                  <strong>修订 {{ revision.revisionNo }}</strong>
+                  <span>{{ formatDateTime(revision.submittedAt) }}</span>
+                  <i :class="['state-chip', statusTone(revision.status)]">
+                    {{ reviewTaskStatusLabels[revision.status] || revision.status }}
+                  </i>
+                </div>
+              </template>
+              <div class="revision-item-list">
+                <div v-for="item in revision.items" :key="item.id">
+                  <span>{{ item.fieldLabel }}</span>
+                  <strong>{{ item.displayValue }}</strong>
+                  <small>{{ reviewItemStatusLabels[item.status] || item.status }}</small>
+                </div>
+              </div>
+            </el-collapse-item>
+          </el-collapse>
+        </template>
+      </div>
+      <template #footer>
+        <el-button @click="reviewDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </main>
 </template>
