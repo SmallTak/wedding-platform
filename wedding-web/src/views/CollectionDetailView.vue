@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft, X } from '@lucide/vue'
 import { publicApi } from '../api/public'
+import BrandLogo from '../components/BrandLogo.vue'
 import ContentAccessGate from '../components/ContentAccessGate.vue'
 
 const route = useRoute()
@@ -80,9 +81,8 @@ function closePreview() {
 <template>
   <div class="site-shell collection-detail-page">
     <header class="site-header detail-header">
-      <RouterLink class="brand" to="/" aria-label="Wedding Archive 首页">
-        <span class="brand-mark">WA</span>
-        <span>Wedding Archive</span>
+      <RouterLink class="brand" to="/" aria-label="糖诗·美学首页">
+        <BrandLogo />
       </RouterLink>
       <RouterLink class="detail-back-link" to="/">
         <ArrowLeft :size="17" />

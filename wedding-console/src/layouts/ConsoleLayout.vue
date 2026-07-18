@@ -18,6 +18,7 @@ import {
 } from '@lucide/vue'
 import http from '../api/http'
 import { useAuthStore } from '../stores/auth'
+import BrandLogo from '../components/BrandLogo.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -78,9 +79,8 @@ function logout() {
 <template>
   <div class="console-shell">
     <aside class="sidebar">
-      <RouterLink class="console-brand" to="/" aria-label="Wedding Console 工作台">
-        <span>WA</span>
-        <strong>Wedding Console</strong>
+      <RouterLink class="console-brand" to="/" aria-label="糖诗·美学工作台">
+        <BrandLogo light />
       </RouterLink>
 
       <nav class="console-nav" aria-label="工作台导航">

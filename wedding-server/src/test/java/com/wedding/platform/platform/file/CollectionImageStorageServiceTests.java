@@ -14,6 +14,7 @@ import java.nio.ByteOrder;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CollectionImageStorageServiceTests {
 
@@ -69,6 +70,35 @@ class CollectionImageStorageServiceTests {
         }
     }
 
+    @Test
+    void brandWatermarkIsAppliedToPreviewButNotThumbnail() throws Exception {
+        CollectionImageStorageService service = new CollectionImageStorageService(
+                storageRoot.toString(),
+                "originals",
+                "previews",
+                "thumbnails",
+                1200,
+                480,
+                "classpath:/brand/watermark.png"
+        );
+        Color background = new Color(150, 150, 150);
+        MockMultipartFile upload = new MockMultipartFile(
+                "files",
+                "watermark-source.png",
+                "image/png",
+                solidPng(1200, 800, background)
+        );
+
+        CollectionImageStorageService.StoredImage stored = service.store(upload);
+        BufferedImage preview = ImageIO.read(storageRoot.resolve(stored.previewPath()).toFile());
+        BufferedImage thumbnail = ImageIO.read(storageRoot.resolve(stored.thumbnailPath()).toFile());
+
+        assertTrue(countChangedPixels(preview, background, 20) > 500,
+                "preview should contain the branded watermark");
+        assertTrue(countChangedPixels(thumbnail, background, 20) < 20,
+                "thumbnail should remain free of the watermark");
+    }
+
     private byte[] jpegWithExifOrientation(int orientation) throws Exception {
         BufferedImage image = new BufferedImage(80, 40, BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = image.createGraphics();
@@ -94,6 +124,35 @@ class CollectionImageStorageServiceTests {
         result.write(exif);
         result.write(jpeg, 2, jpeg.length - 2);
         return result.toByteArray();
+    }
+
+    private byte[] solidPng(int width, int height, Color color) throws Exception {
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = image.createGraphics();
+        try {
+            graphics.setColor(color);
+            graphics.fillRect(0, 0, width, height);
+        } finally {
+            graphics.dispose();
+        }
+        ByteArrayOutputStream encoded = new ByteArrayOutputStream();
+        ImageIO.write(image, "png", encoded);
+        return encoded.toByteArray();
+    }
+
+    private long countChangedPixels(BufferedImage image, Color expected, int tolerance) {
+        long changed = 0;
+        for (int y = image.getHeight() / 2; y < image.getHeight(); y++) {
+            for (int x = image.getWidth() / 2; x < image.getWidth(); x++) {
+                Color actual = new Color(image.getRGB(x, y));
+                if (Math.abs(actual.getRed() - expected.getRed()) > tolerance
+                        || Math.abs(actual.getGreen() - expected.getGreen()) > tolerance
+                        || Math.abs(actual.getBlue() - expected.getBlue()) > tolerance) {
+                    changed++;
+                }
+            }
+        }
+        return changed;
     }
 
     private byte[] exifOrientationSegment(int orientation) {

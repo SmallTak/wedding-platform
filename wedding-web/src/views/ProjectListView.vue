@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { ArrowLeft, ChevronLeft, ChevronRight, Search } from '@lucide/vue'
 import heroImage from '../assets/wedding-hero.jpg'
 import { publicApi } from '../api/public'
+import BrandLogo from '../components/BrandLogo.vue'
 
 const loading = ref(false)
 const errorMessage = ref('')
@@ -58,9 +59,8 @@ function formatDate(value) {
 <template>
   <div class="site-shell project-list-page">
     <header class="site-header detail-header">
-      <RouterLink class="brand" to="/" aria-label="Wedding Archive 首页">
-        <span class="brand-mark">WA</span>
-        <span>Wedding Archive</span>
+      <RouterLink class="brand" to="/" aria-label="糖诗·美学首页">
+        <BrandLogo />
       </RouterLink>
       <RouterLink class="detail-back-link" to="/">
         <ArrowLeft :size="17" />

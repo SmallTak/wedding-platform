@@ -43,7 +43,7 @@ const router = createRouter({
 })
 
 router.afterEach((to) => {
-  document.title = `${to.meta.title || '婚礼作品集'} | Wedding Archive`
+  document.title = `${to.meta.title || '婚礼作品集'} | 糖诗·美学`
 })
 
 export default router

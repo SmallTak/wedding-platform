@@ -70,19 +70,52 @@ a {
   border-bottom: 1px solid rgba(255, 255, 255, 0.14);
 }
 
-.console-brand > span {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border: 1px solid #dce2d7;
-  font-family: Georgia, serif;
-  font-size: 11px;
+.brand-lockup {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.console-brand strong {
+.brand-lockup > img {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+}
+
+.brand-lockup > span {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.brand-lockup strong {
+  font-family: "Songti SC", "STSong", "Noto Serif CJK SC", serif;
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.brand-lockup small {
+  color: var(--muted);
+  font-size: 7px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.console-brand .brand-lockup > img {
+  width: 34px;
+  height: 34px;
+}
+
+.console-brand .brand-lockup strong {
+  color: #f4f5f1;
   font-size: 14px;
-  font-weight: 600;
+}
+
+.console-brand .brand-lockup small {
+  color: #aeb4ab;
 }
 
 .console-nav {
@@ -564,7 +597,7 @@ a {
     padding-inline: 0;
   }
 
-  .console-brand strong,
+  .console-brand .brand-lockup > span,
   .console-nav span,
   .sidebar-user div {
     display: none;
@@ -608,9 +641,13 @@ a {
     border: 0;
   }
 
-  .console-brand > span {
+  .console-brand .brand-lockup > img {
     width: 30px;
     height: 30px;
+  }
+
+  .console-brand .brand-lockup > span {
+    display: grid;
   }
 
   .console-nav,
@@ -691,6 +728,14 @@ textarea {
   opacity: 0.58;
 }
 
+.primary-command:hover:not(:disabled) {
+  background: #264b3c;
+}
+
+.primary-command:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
 .secondary-command {
   min-height: 40px;
   padding: 0 14px;
@@ -723,38 +768,86 @@ textarea {
 
 .login-page {
   min-height: 100vh;
-  padding: 32px;
+  min-height: 100svh;
   display: grid;
-  place-items: center;
-  background: var(--canvas);
+  grid-template-columns: minmax(0, 1.35fr) minmax(430px, 0.65fr);
+  background: #202820;
 }
 
-.login-panel {
-  width: min(100%, 430px);
-  padding: 34px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
+.login-visual {
+  position: relative;
+  min-width: 0;
+  min-height: 100vh;
+  min-height: 100svh;
+  padding: 38px clamp(32px, 5vw, 72px) 46px;
+  display: flex;
+  justify-content: space-between;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: #26342c;
+  background-position: center 44%;
+  background-size: cover;
+  color: #fff;
 }
 
-.login-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 11px;
+.login-visual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(18, 23, 19, 0.34);
 }
 
-.login-brand > span {
-  width: 34px;
-  height: 34px;
+.login-visual-brand,
+.login-visual-caption {
+  position: relative;
+  z-index: 1;
+}
+
+.login-visual .brand-lockup > img {
+  width: 46px;
+  height: 46px;
+}
+
+.login-visual .brand-lockup strong {
+  color: #fff;
+  font-size: 21px;
+}
+
+.login-visual .brand-lockup small {
+  color: #e4e8e1;
+  font-size: 8px;
+}
+
+.login-visual-caption {
+  max-width: 540px;
   display: grid;
-  place-items: center;
-  border: 1px solid var(--ink);
-  font-family: Georgia, serif;
+  gap: 10px;
+}
+
+.login-visual-caption span {
   font-size: 11px;
 }
 
-.login-brand strong {
-  font-size: 14px;
+.login-visual-caption strong {
+  font-family: "Songti SC", "STSong", "Noto Serif CJK SC", serif;
+  font-size: 29px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.login-panel {
+  width: min(100%, 520px);
+  min-height: 100vh;
+  min-height: 100svh;
+  padding: clamp(40px, 6vw, 84px);
+  display: flex;
+  justify-content: center;
+  flex-direction: column;
+  background: var(--surface);
+}
+
+.login-panel-brand {
+  align-self: flex-start;
 }
 
 .login-heading,
@@ -815,9 +908,40 @@ textarea {
   color: var(--ink);
 }
 
+.password-toggle {
+  width: 32px;
+  height: 32px;
+  margin-right: -7px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+  background: #edf0eb;
+  color: var(--green);
+  outline: none;
+}
+
 .login-form .primary-command {
   width: 100%;
   margin-top: 20px;
+}
+
+.loading-icon {
+  animation: command-spin 850ms linear infinite;
+}
+
+@keyframes command-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .setup-page {
@@ -1243,16 +1367,22 @@ textarea {
   }
 
   .login-page {
-    padding: 20px;
+    display: block;
     background: var(--canvas);
   }
 
+  .login-visual {
+    display: none;
+  }
+
   .login-panel {
-    padding: 26px 22px;
+    width: 100%;
+    max-width: none;
+    padding: 28px 24px;
   }
 
   .login-heading {
-    margin-top: 40px;
+    margin: 42px 0 24px;
   }
 
   .setup-content {
@@ -2138,6 +2268,10 @@ textarea {
 }
 
 .admin-field-review-list .field-review-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.admin-field-review-list .field-review-item.has-field-checkbox {
   grid-template-columns: 22px minmax(0, 1fr) auto;
 }
 

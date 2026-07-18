@@ -19,8 +19,6 @@ import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.ImageOutputStream;
 import java.awt.AlphaComposite;
 import java.awt.Color;
-import java.awt.Font;
-import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
@@ -58,7 +56,7 @@ public class CollectionImageStorageService {
     private final String thumbnailsDirectory;
     private final int previewMaxWidth;
     private final int thumbnailMaxWidth;
-    private final String watermarkText;
+    private final BufferedImage watermarkImage;
 
     public CollectionImageStorageService(
             @Value("${app.storage.root}") String storageRoot,
@@ -67,7 +65,8 @@ public class CollectionImageStorageService {
             @Value("${app.storage.thumbnails:thumbnails}") String thumbnailsDirectory,
             @Value("${app.storage.images.preview-max-width:1920}") int previewMaxWidth,
             @Value("${app.storage.images.thumbnail-max-width:480}") int thumbnailMaxWidth,
-            @Value("${app.storage.images.watermark-text:photo.shop-hz.top}") String watermarkText
+            @Value("${app.storage.images.watermark-resource:classpath:/brand/watermark.png}")
+            String watermarkResource
     ) {
         this.storageRoot = Path.of(storageRoot).toAbsolutePath().normalize();
         this.originalsDirectory = validateDirectory(originalsDirectory);
@@ -75,7 +74,7 @@ public class CollectionImageStorageService {
         this.thumbnailsDirectory = validateDirectory(thumbnailsDirectory);
         this.previewMaxWidth = requirePositive(previewMaxWidth, "Preview max width");
         this.thumbnailMaxWidth = requirePositive(thumbnailMaxWidth, "Thumbnail max width");
-        this.watermarkText = watermarkText == null ? "" : watermarkText.trim();
+        this.watermarkImage = loadWatermark(watermarkResource);
     }
 
     public StoredImage store(MultipartFile file) {
@@ -308,31 +307,66 @@ public class CollectionImageStorageService {
     }
 
     private void applyWatermark(BufferedImage image) {
-        if (watermarkText.isBlank()) {
+        if (watermarkImage == null) {
             return;
         }
         Graphics2D graphics = image.createGraphics();
         try {
-            graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
-                    RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-            int fontSize = Math.max(14, Math.min(48, Math.min(image.getWidth(), image.getHeight()) / 24));
-            Font font = new Font(Font.SANS_SERIF, Font.BOLD, fontSize);
-            graphics.setFont(font);
-            FontMetrics metrics = graphics.getFontMetrics();
-            int margin = Math.max(12, fontSize / 2);
-            int textWidth = metrics.stringWidth(watermarkText);
-            int x = Math.max(margin, image.getWidth() - textWidth - margin);
-            int y = Math.max(metrics.getAscent() + margin, image.getHeight() - margin);
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                    RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            graphics.setRenderingHint(RenderingHints.KEY_RENDERING,
+                    RenderingHints.VALUE_RENDER_QUALITY);
 
-            graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.45f));
-            graphics.setColor(Color.BLACK);
-            graphics.drawString(watermarkText, x + 2, y + 2);
-            graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.78f));
-            graphics.setColor(Color.WHITE);
-            graphics.drawString(watermarkText, x, y);
+            int targetWidth = Math.max(1, Math.min(420, (int) Math.round(image.getWidth() * 0.32d)));
+            int targetHeight = Math.max(1, (int) Math.round(
+                    (double) watermarkImage.getHeight() * targetWidth / watermarkImage.getWidth()
+            ));
+            int maxHeight = Math.max(1, (int) Math.round(image.getHeight() * 0.16d));
+            if (targetHeight > maxHeight) {
+                targetHeight = maxHeight;
+                targetWidth = Math.max(1, (int) Math.round(
+                        (double) watermarkImage.getWidth() * targetHeight / watermarkImage.getHeight()
+                ));
+            }
+
+            int margin = Math.max(10, Math.min(image.getWidth(), image.getHeight()) / 36);
+            int x = Math.max(0, image.getWidth() - targetWidth - margin);
+            int y = Math.max(0, image.getHeight() - targetHeight - margin);
+            graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.76f));
+            graphics.drawImage(watermarkImage, x, y, targetWidth, targetHeight, null);
         } finally {
             graphics.dispose();
         }
+    }
+
+    private BufferedImage loadWatermark(String location) {
+        if (location == null || location.isBlank()) {
+            return null;
+        }
+        String normalized = location.trim();
+        try (InputStream input = openWatermark(normalized)) {
+            if (input == null) {
+                throw new IllegalStateException("Watermark resource does not exist: " + normalized);
+            }
+            BufferedImage image = ImageIO.read(input);
+            if (image == null || image.getWidth() < 1 || image.getHeight() < 1) {
+                throw new IllegalStateException("Watermark resource is not a valid image: " + normalized);
+            }
+            return image;
+        } catch (IOException exception) {
+            throw new IllegalStateException("Watermark resource could not be loaded: " + normalized, exception);
+        }
+    }
+
+    private InputStream openWatermark(String location) throws IOException {
+        if (location.startsWith("classpath:")) {
+            String resourcePath = location.substring("classpath:".length());
+            if (!resourcePath.startsWith("/")) {
+                resourcePath = "/" + resourcePath;
+            }
+            return CollectionImageStorageService.class.getResourceAsStream(resourcePath);
+        }
+        return Files.newInputStream(Path.of(location).toAbsolutePath().normalize());
     }
 
     private void writeJpeg(BufferedImage image, Path target, float quality) throws IOException {

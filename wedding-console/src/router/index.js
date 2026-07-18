@@ -98,7 +98,7 @@ router.beforeEach(async (to) => {
 })
 
 router.afterEach((to) => {
-  document.title = `${to.meta.title || '工作台'} | Wedding Console`
+  document.title = `${to.meta.title || '工作台'} | 糖诗·美学`
 })
 
 export default router

@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ArrowLeft, CalendarDays, MapPin } from '@lucide/vue'
 import { useRoute } from 'vue-router'
 import ContentAccessGate from '../components/ContentAccessGate.vue'
+import BrandLogo from '../components/BrandLogo.vue'
 import heroImage from '../assets/wedding-hero.jpg'
 import { publicApi } from '../api/public'
 
@@ -73,9 +74,8 @@ function formatDate(value) {
 <template>
   <div class="site-shell project-detail-page">
     <header class="site-header detail-header">
-      <RouterLink class="brand" to="/" aria-label="Wedding Archive 首页">
-        <span class="brand-mark">WA</span>
-        <span>Wedding Archive</span>
+      <RouterLink class="brand" to="/" aria-label="糖诗·美学首页">
+        <BrandLogo />
       </RouterLink>
       <RouterLink class="detail-back-link" :to="{ name: 'project-list' }">
         <ArrowLeft :size="17" />

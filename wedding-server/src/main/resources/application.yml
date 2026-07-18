@@ -49,4 +49,4 @@ app:
     images:
       preview-max-width: ${IMAGE_PREVIEW_MAX_WIDTH:1920}
       thumbnail-max-width: ${IMAGE_THUMBNAIL_MAX_WIDTH:480}
-      watermark-text: ${IMAGE_WATERMARK_TEXT:photo.shop-hz.top}
+      watermark-resource: ${IMAGE_WATERMARK_RESOURCE:classpath:/brand/watermark.png}

@@ -3,6 +3,7 @@ import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowRight, Camera, CircleUserRound, LogOut } from '@lucide/vue'
 import { useAuthStore } from '../stores/auth'
+import BrandLogo from '../components/BrandLogo.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -75,7 +76,7 @@ function logout() {
 <template>
   <main class="setup-page">
     <header class="setup-header">
-      <div class="login-brand"><span>WA</span><strong>Wedding Console</strong></div>
+      <BrandLogo />
       <button class="icon-command" type="button" aria-label="退出登录" title="退出登录" @click="logout"><LogOut :size="18" /></button>
     </header>
     <section class="setup-content" aria-labelledby="setup-title">

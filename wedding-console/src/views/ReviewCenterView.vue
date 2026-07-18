@@ -506,7 +506,11 @@ async function reloadDetail() {
           </section>
 
           <section class="field-review-list admin-field-review-list">
-            <label v-for="item in fieldItems" :key="item.id" class="field-review-item">
+            <label
+              v-for="item in fieldItems"
+              :key="item.id"
+              :class="['field-review-item', { 'has-field-checkbox': item.status === 'PENDING' }]"
+            >
               <input
                 v-if="item.status === 'PENDING'"
                 v-model="selectedFieldIds"

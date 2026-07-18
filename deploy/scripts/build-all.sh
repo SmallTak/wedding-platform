@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 NODE_DOCKER_IMAGE="${NODE_DOCKER_IMAGE:-node:22.18.0-bookworm-slim}"
 
+bash "$ROOT_DIR/deploy/scripts/sync-brand-assets.sh"
+
 node_supported() {
   command -v node >/dev/null 2>&1 || return 1
   node -e '

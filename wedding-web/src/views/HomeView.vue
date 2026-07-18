@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { ArrowUpRight, Menu, Search, X } from '@lucide/vue'
 import heroImage from '../assets/wedding-hero.jpg'
 import { publicApi } from '../api/public'
+import BrandLogo from '../components/BrandLogo.vue'
 
 const menuOpen = ref(false)
 const searchOpen = ref(false)
@@ -82,9 +83,8 @@ async function selectCategory(categoryId) {
 <template>
   <div class="site-shell">
     <header class="site-header">
-      <RouterLink class="brand" to="/" aria-label="Wedding Archive 首页">
-        <span class="brand-mark">WA</span>
-        <span>Wedding Archive</span>
+      <RouterLink class="brand" to="/" aria-label="糖诗·美学首页">
+        <BrandLogo />
       </RouterLink>
 
       <nav :class="['site-nav', { 'is-open': menuOpen }]" aria-label="主导航">
@@ -129,8 +129,8 @@ async function selectCategory(categoryId) {
       <section class="hero-section" :style="{ backgroundImage: `url(${heroBackground})` }">
         <div class="hero-overlay"></div>
         <div class="hero-content">
-          <p class="eyebrow">Wedding stories · 2026</p>
-          <h1>Wedding Archive</h1>
+          <p class="eyebrow">TANGSHI AESTHETICS · 2026</p>
+          <h1>糖诗·美学</h1>
           <p class="hero-copy">收藏仪式发生时，那些无法重来的光线、表情与拥抱。</p>
           <a class="hero-link" href="#works">
             浏览公开作品
@@ -212,7 +212,7 @@ async function selectCategory(categoryId) {
     </main>
 
     <footer class="site-footer">
-      <span>© 2026 Wedding Archive</span>
+      <span>© 2026 糖诗·美学</span>
       <span class="service-status">
         <i :class="{ online: serviceOnline }"></i>
         {{ serviceOnline ? '服务在线' : '服务维护中' }}
