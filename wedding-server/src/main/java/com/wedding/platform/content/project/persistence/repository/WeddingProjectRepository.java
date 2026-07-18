@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
+import java.util.List;
 
 public interface WeddingProjectRepository extends JpaRepository<WeddingProject, Long> {
 
@@ -18,7 +19,40 @@ public interface WeddingProjectRepository extends JpaRepository<WeddingProject, 
 
     Optional<WeddingProject> findByIdAndDeletedFalseAndPublishStatus(Long id, PublishStatus publishStatus);
 
+    @Query("""
+            SELECT project
+            FROM WeddingProject project
+            WHERE project.deleted = false
+              AND project.publishStatus = :publishStatus
+              AND project.visibility = :visibility
+            ORDER BY project.publishedAt DESC, project.id DESC
+            """)
+    List<WeddingProject> findLatestPublicProjects(
+            @Param("publishStatus") PublishStatus publishStatus,
+            @Param("visibility") ContentVisibility visibility,
+            Pageable pageable
+    );
+
     boolean existsByProjectCode(String projectCode);
+
+    List<WeddingProject> findAllByDeletedFalseOrderByCreatedAtDesc();
+
+    @Query("""
+            SELECT project
+            FROM WeddingProject project
+            WHERE project.deleted = false
+              AND (
+                project.createdBy = :userId
+                OR EXISTS (
+                    SELECT creator.id.projectId
+                    FROM ProjectCreator creator
+                    WHERE creator.id.projectId = project.id
+                      AND creator.id.creatorUserId = :userId
+                )
+              )
+            ORDER BY project.createdAt DESC
+            """)
+    List<WeddingProject> findAllAccessibleProjects(@Param("userId") Long userId);
 
     @Query("""
             SELECT project

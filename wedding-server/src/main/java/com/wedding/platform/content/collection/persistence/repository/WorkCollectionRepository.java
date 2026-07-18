@@ -19,6 +19,8 @@ public interface WorkCollectionRepository extends JpaRepository<WorkCollection, 
 
     boolean existsByProjectIdAndDeletedFalse(Long projectId);
 
+    boolean existsByCategoryIdAndDeletedFalse(Long categoryId);
+
     @Query("""
             SELECT work
             FROM WorkCollection work
@@ -129,6 +131,20 @@ public interface WorkCollectionRepository extends JpaRepository<WorkCollection, 
     Optional<WorkCollection> findByIdAndDeletedFalseAndPublishStatus(
             Long id,
             PublishStatus publishStatus
+    );
+
+    @Query("""
+            SELECT work
+            FROM WorkCollection work
+            WHERE work.deleted = false
+              AND work.publishStatus = :publishStatus
+              AND work.visibility = :visibility
+            ORDER BY work.publishedAt DESC, work.id DESC
+            """)
+    List<WorkCollection> findLatestPublicCollections(
+            @Param("publishStatus") PublishStatus publishStatus,
+            @Param("visibility") ContentVisibility visibility,
+            Pageable pageable
     );
 
     @Query("""

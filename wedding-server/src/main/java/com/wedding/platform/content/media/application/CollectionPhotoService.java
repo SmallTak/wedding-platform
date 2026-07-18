@@ -163,7 +163,6 @@ public class CollectionPhotoService {
         requireAccess(actor, collection);
         requireEditable(collection);
         requireVersion(collection, request.version());
-        prepareContentChange(collection, operatorId);
 
         List<CollectionPhoto> photos = photoRepository
                 .findAllByCollectionIdAndDeletedFalseOrderBySortOrderAscIdAsc(collectionId);
@@ -174,15 +173,28 @@ public class CollectionPhotoService {
         }
         Map<Long, CollectionPhoto> photosById = new HashMap<>();
         photos.forEach(photo -> photosById.put(photo.getId(), photo));
+        List<CollectionPhoto> changedPhotos = new ArrayList<>();
         for (int index = 0; index < request.photoIds().size(); index++) {
             CollectionPhoto photo = photosById.get(request.photoIds().get(index));
             if (photo == null) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "PHOTO_ORDER_INVALID",
                         "Photo order contains a photo outside this collection");
             }
+            if (photo.getSortOrder() != index) {
+                changedPhotos.add(photo);
+            }
+        }
+        if (changedPhotos.isEmpty()) {
+            return toResponse(collection);
+        }
+
+        prepareContentChange(collection, operatorId);
+        for (int index = 0; index < request.photoIds().size(); index++) {
+            CollectionPhoto photo = photosById.get(request.photoIds().get(index));
             photo.setSortOrder(index);
             photo.setUpdatedBy(operatorId);
         }
+        changedPhotos.forEach(photo -> resetPhotoReview(photo, operatorId));
         photoRepository.saveAll(photos);
         markContentChanged(collection, operatorId);
         bumpCollection(collection, operatorId);
@@ -203,11 +215,14 @@ public class CollectionPhotoService {
         requireAccess(actor, collection);
         requireEditable(collection);
         requireVersion(collection, request.version());
-        prepareContentChange(collection, operatorId);
         photoRepository.findByIdAndCollectionIdAndDeletedFalse(request.photoId(), collectionId)
                 .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "COVER_PHOTO_INVALID",
                         "Cover photo must belong to this collection"));
+        if (request.photoId().equals(collection.getCoverPhotoId())) {
+            return toResponse(collection);
+        }
 
+        prepareContentChange(collection, operatorId);
         collection.setCoverPhotoId(request.photoId());
         markContentChanged(collection, operatorId);
         bumpCollection(collection, operatorId);
@@ -229,10 +244,11 @@ public class CollectionPhotoService {
         requireAccess(actor, collection);
         requireEditable(collection);
         requireVersion(collection, version);
-        prepareContentChange(collection, operatorId);
         CollectionPhoto photo = photoRepository.findByIdAndCollectionIdAndDeletedFalse(photoId, collectionId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PHOTO_NOT_FOUND",
                         "Collection photo was not found"));
+        prepareContentChange(collection, operatorId);
+        boolean approvedPhotoRemoved = ReviewStatus.APPROVED == photo.getReviewStatus();
 
         photo.setDeleted(true);
         photo.setDeletedAt(Instant.now());
@@ -243,7 +259,14 @@ public class CollectionPhotoService {
             collection.setCoverPhotoId(null);
         }
         markContentChanged(collection, operatorId);
-        recalculateAfterDeletion(collection);
+        if (approvedPhotoRemoved) {
+            List<CollectionPhoto> remainingPhotos = photoRepository
+                    .findAllByCollectionIdAndDeletedFalseOrderBySortOrderAscIdAsc(collectionId);
+            remainingPhotos.forEach(activePhoto -> resetPhotoReview(activePhoto, operatorId));
+            photoRepository.saveAll(remainingPhotos);
+        } else {
+            recalculateAfterDeletion(collection);
+        }
         bumpCollection(collection, operatorId);
         auditLogService.record(operatorId, actor.getAccountType(), "COLLECTION_PHOTO", "DELETE_PHOTO",
                 "COLLECTION_PHOTO", photoId, "Collection photo logically deleted", ipAddress);
@@ -390,6 +413,15 @@ public class CollectionPhotoService {
         if (PublishStatus.READY == collection.getPublishStatus()) {
             collection.setPublishStatus(PublishStatus.UNPUBLISHED);
         }
+    }
+
+    private void resetPhotoReview(CollectionPhoto photo, Long operatorId) {
+        photo.setReviewStatus(ReviewStatus.DRAFT);
+        photo.setRejectionReason(null);
+        photo.setSubmittedAt(null);
+        photo.setReviewedAt(null);
+        photo.setReviewedBy(null);
+        photo.setUpdatedBy(operatorId);
     }
 
     private void prepareContentChange(WorkCollection collection, Long operatorId) {

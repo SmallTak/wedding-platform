@@ -114,6 +114,44 @@ public class PublicCollectionService {
     }
 
     @Transactional(readOnly = true)
+    public List<PublicCollectionDtos.CollectionSummary> latestCollections(int size) {
+        int limitedSize = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
+        return collectionRepository.findLatestPublicCollections(
+                        PublishStatus.PUBLISHED,
+                        ContentVisibility.PUBLIC,
+                        PageRequest.of(0, limitedSize))
+                .stream()
+                .map(this::toSummary)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<PublicCollectionDtos.CollectionSummary> collectionsByIds(List<Long> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, WorkCollection> byId = collectionRepository.findAllById(ids).stream()
+                .filter(collection -> !Boolean.TRUE.equals(collection.getDeleted()))
+                .filter(collection -> PublishStatus.PUBLISHED == collection.getPublishStatus())
+                .filter(collection -> ContentVisibility.PUBLIC == collection.getVisibility())
+                .collect(Collectors.toMap(WorkCollection::getId, Function.identity()));
+        return ids.stream()
+                .map(byId::get)
+                .filter(collection -> collection != null)
+                .map(this::toSummary)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isPublicCollection(Long collectionId) {
+        return collectionRepository.findByIdAndDeletedFalseAndPublishStatusAndVisibility(
+                        collectionId,
+                        PublishStatus.PUBLISHED,
+                        ContentVisibility.PUBLIC)
+                .isPresent();
+    }
+
+    @Transactional(readOnly = true)
     public PublicCollectionDtos.CollectionDetail collection(Long collectionId, String accessToken) {
         WorkCollection collection = collectionRepository
                 .findByIdAndDeletedFalseAndPublishStatus(collectionId, PublishStatus.PUBLISHED)

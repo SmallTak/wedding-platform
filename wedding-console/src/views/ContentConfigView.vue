@@ -1,12 +1,13 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Folder, Pencil, Plus, RefreshCw, Tags } from '@lucide/vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Folder, Pencil, Plus, RefreshCw, Tags, Trash2 } from '@lucide/vue'
 import { contentConfigApi } from '../api/content'
 import { apiErrorMessage, formatDateTime, isVersionConflict, statusTone } from '../utils/content'
 
 const loading = ref(false)
 const saving = ref(false)
+const deletingId = ref(null)
 const activeTab = ref('categories')
 const categories = ref([])
 const tags = ref([])
@@ -113,6 +114,37 @@ async function saveItem() {
     saving.value = false
   }
 }
+
+async function deleteItem(item) {
+  const isCategory = activeTab.value === 'categories'
+  const subject = isCategory ? '分类' : '标签'
+  try {
+    await ElMessageBox.confirm(
+      `确认删除${subject}“${item.name}”？删除后不再出现在配置和作品集选项中。`,
+      `删除${subject}`,
+      {
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+
+  deletingId.value = item.id
+  try {
+    if (isCategory) await contentConfigApi.deleteCategory(item.id, item.version)
+    else await contentConfigApi.deleteTag(item.id, item.version)
+    ElMessage.success(`${subject}已删除`)
+    await loadData()
+  } catch (error) {
+    if (isVersionConflict(error)) await loadData()
+    ElMessage.error(apiErrorMessage(error, `${subject}删除失败`))
+  } finally {
+    deletingId.value = null
+  }
+}
 </script>
 
 <template>
@@ -176,6 +208,16 @@ async function saveItem() {
           <div class="row-commands" data-label="操作">
             <button type="button" aria-label="编辑" title="编辑" @click="openEditDialog(item)">
               <Pencil :size="16" />
+            </button>
+            <button
+              class="danger-command"
+              type="button"
+              :aria-label="`删除${activeTab === 'categories' ? '分类' : '标签'}`"
+              :title="`删除${activeTab === 'categories' ? '分类' : '标签'}`"
+              :disabled="deletingId === item.id"
+              @click="deleteItem(item)"
+            >
+              <Trash2 :size="16" />
             </button>
           </div>
         </article>

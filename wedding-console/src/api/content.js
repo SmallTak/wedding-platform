@@ -37,6 +37,9 @@ export const contentConfigApi = {
   updateCategory(categoryId, payload) {
     return http.put(`/admin/content/categories/${categoryId}`, payload)
   },
+  deleteCategory(categoryId, version) {
+    return http.delete(`/admin/content/categories/${categoryId}`, { params: { version } })
+  },
   tags() {
     return http.get('/admin/content/tags')
   },
@@ -45,6 +48,9 @@ export const contentConfigApi = {
   },
   updateTag(tagId, payload) {
     return http.put(`/admin/content/tags/${tagId}`, payload)
+  },
+  deleteTag(tagId, version) {
+    return http.delete(`/admin/content/tags/${tagId}`, { params: { version } })
   },
 }
 

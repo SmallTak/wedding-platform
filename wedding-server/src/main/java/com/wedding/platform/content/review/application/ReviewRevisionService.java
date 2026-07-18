@@ -1,10 +1,12 @@
 package com.wedding.platform.content.review.application;
 
 import com.wedding.platform.content.collection.persistence.entity.CollectionTag;
+import com.wedding.platform.content.collection.persistence.entity.CollectionCreator;
 import com.wedding.platform.content.collection.persistence.entity.ContentCategory;
 import com.wedding.platform.content.collection.persistence.entity.ContentTag;
 import com.wedding.platform.content.collection.persistence.entity.WorkCollection;
 import com.wedding.platform.content.collection.persistence.repository.CollectionTagRepository;
+import com.wedding.platform.content.collection.persistence.repository.CollectionCreatorRepository;
 import com.wedding.platform.content.collection.persistence.repository.ContentCategoryRepository;
 import com.wedding.platform.content.collection.persistence.repository.ContentTagRepository;
 import com.wedding.platform.content.media.persistence.entity.CollectionPhoto;
@@ -12,6 +14,8 @@ import com.wedding.platform.content.media.persistence.entity.MediaAsset;
 import com.wedding.platform.content.media.persistence.repository.CollectionPhotoRepository;
 import com.wedding.platform.content.media.persistence.repository.MediaAssetRepository;
 import com.wedding.platform.content.project.persistence.entity.WeddingProject;
+import com.wedding.platform.content.project.persistence.entity.ProjectCreator;
+import com.wedding.platform.content.project.persistence.repository.ProjectCreatorRepository;
 import com.wedding.platform.content.project.persistence.repository.WeddingProjectRepository;
 import com.wedding.platform.content.review.persistence.entity.ReviewActionLog;
 import com.wedding.platform.content.review.persistence.entity.ReviewItem;
@@ -26,6 +30,8 @@ import com.wedding.platform.content.review.persistence.repository.ReviewTaskRepo
 import com.wedding.platform.content.review.web.ReviewDtos;
 import com.wedding.platform.content.shared.ReviewStatus;
 import com.wedding.platform.platform.web.ApiException;
+import com.wedding.platform.system.account.persistence.entity.SystemUser;
+import com.wedding.platform.system.account.persistence.repository.SystemUserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -73,6 +79,7 @@ public class ReviewRevisionService {
             Map.entry("REGION_CODE", "地区编码"),
             Map.entry("LOCATION_TEXT", "婚礼地点"),
             Map.entry("DESCRIPTION", "内容介绍"),
+            Map.entry("CREATORS", "参与创作者"),
             Map.entry("PROJECT", "关联婚礼项目"),
             Map.entry("CATEGORY", "主分类"),
             Map.entry("TAGS", "内容标签"),
@@ -86,6 +93,9 @@ public class ReviewRevisionService {
     private final ContentCategoryRepository categoryRepository;
     private final ContentTagRepository tagRepository;
     private final CollectionTagRepository collectionTagRepository;
+    private final ProjectCreatorRepository projectCreatorRepository;
+    private final CollectionCreatorRepository collectionCreatorRepository;
+    private final SystemUserRepository userRepository;
     private final CollectionPhotoRepository photoRepository;
     private final MediaAssetRepository assetRepository;
     private final ObjectMapper objectMapper;
@@ -98,6 +108,9 @@ public class ReviewRevisionService {
             ContentCategoryRepository categoryRepository,
             ContentTagRepository tagRepository,
             CollectionTagRepository collectionTagRepository,
+            ProjectCreatorRepository projectCreatorRepository,
+            CollectionCreatorRepository collectionCreatorRepository,
+            SystemUserRepository userRepository,
             CollectionPhotoRepository photoRepository,
             MediaAssetRepository assetRepository,
             ObjectMapper objectMapper
@@ -109,6 +122,9 @@ public class ReviewRevisionService {
         this.categoryRepository = categoryRepository;
         this.tagRepository = tagRepository;
         this.collectionTagRepository = collectionTagRepository;
+        this.projectCreatorRepository = projectCreatorRepository;
+        this.collectionCreatorRepository = collectionCreatorRepository;
+        this.userRepository = userRepository;
         this.photoRepository = photoRepository;
         this.assetRepository = assetRepository;
         this.objectMapper = objectMapper;
@@ -374,7 +390,7 @@ public class ReviewRevisionService {
             String snapshotJson = json(entry.getValue().payload());
             ReviewItem current = itemRepository.findCurrentField(
                     targetType, targetId, ReviewItemType.FIELD, entry.getKey()).orElse(null);
-            if (current != null && current.getSnapshotJson().equals(snapshotJson)) {
+            if (current != null && sameSnapshotValue(current.getSnapshotJson(), snapshotJson)) {
                 continue;
             }
             pendingItems.add(new PendingItem(
@@ -567,6 +583,12 @@ public class ReviewRevisionService {
         values.put("REGION_CODE", snapshot(project.getRegionCode(), project.getRegionCode()));
         values.put("LOCATION_TEXT", snapshot(project.getLocationText(), project.getLocationText()));
         values.put("DESCRIPTION", snapshot(project.getDescription(), display(project.getDescription())));
+        values.put("CREATORS", creatorSnapshot(
+                projectCreatorRepository.findAllByProjectId(project.getId()).stream()
+                        .map(ProjectCreator::getId)
+                        .map(id -> id.getCreatorUserId())
+                        .toList()
+        ));
         return values;
     }
 
@@ -636,7 +658,30 @@ public class ReviewRevisionService {
                 coverValue,
                 coverAsset == null ? "未设置封面" : coverAsset.getOriginalName()
         ));
+        values.put("CREATORS", creatorSnapshot(
+                collectionCreatorRepository.findAllByCollectionId(collection.getId()).stream()
+                        .map(CollectionCreator::getId)
+                        .map(id -> id.getCreatorUserId())
+                        .toList()
+        ));
         return values;
+    }
+
+    private Snapshot creatorSnapshot(List<Long> creatorIds) {
+        List<Long> sortedIds = creatorIds.stream().distinct().sorted().toList();
+        Map<Long, SystemUser> users = userRepository.findAllById(sortedIds).stream()
+                .collect(Collectors.toMap(SystemUser::getId, Function.identity()));
+        String creatorDisplay = sortedIds.isEmpty()
+                ? "未分配创作者"
+                : sortedIds.stream()
+                .map(id -> {
+                    SystemUser user = users.get(id);
+                    return user == null || !StringUtils.hasText(user.getDisplayName())
+                            ? "用户 #" + id
+                            : user.getDisplayName();
+                })
+                .collect(Collectors.joining("、"));
+        return snapshot(sortedIds, creatorDisplay);
     }
 
     private PhotoSnapshot photoSnapshot(CollectionPhoto photo) {
@@ -726,6 +771,16 @@ public class ReviewRevisionService {
             return display == null || display.isNull() ? "未填写" : display.asText();
         } catch (Exception exception) {
             return snapshotJson;
+        }
+    }
+
+    private boolean sameSnapshotValue(String currentJson, String candidateJson) {
+        try {
+            JsonNode current = objectMapper.readTree(currentJson).get("value");
+            JsonNode candidate = objectMapper.readTree(candidateJson).get("value");
+            return current != null && current.equals(candidate);
+        } catch (Exception exception) {
+            return currentJson.equals(candidateJson);
         }
     }
 

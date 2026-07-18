@@ -36,6 +36,14 @@ const router = createRouter({
         title: '婚礼项目',
       },
     },
+    {
+      path: '/reviews',
+      name: 'reviews',
+      component: () => import('../views/ReviewsView.vue'),
+      meta: {
+        title: '客户评价',
+      },
+    },
   ],
   scrollBehavior() {
     return { top: 0 }

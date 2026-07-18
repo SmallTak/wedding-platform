@@ -20,6 +20,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -87,13 +88,16 @@ class AccountFlowTests {
                   "professionalRoleIds": [%d]
                 }
                 """.formatted(CREATOR_MOBILE, CREATOR_PASSWORD, professionalRoleId.longValue());
-        mockMvc.perform(post("/api/admin/creators")
+        String creatorJson = mockMvc.perform(post("/api/admin/creators")
                         .header("Authorization", bearer(adminToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(creatorRequest))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.accountType").value("CREATOR"))
-                .andExpect(jsonPath("$.setupRequired").value(true));
+                .andExpect(jsonPath("$.setupRequired").value(true))
+                .andExpect(jsonPath("$.version").isNumber())
+                .andReturn().getResponse().getContentAsString();
+        Number creatorId = JsonPath.read(creatorJson, "$.id");
 
         String creatorToken = login(CREATOR_MOBILE, CREATOR_PASSWORD, true);
         mockMvc.perform(get("/api/admin/creators")
@@ -132,17 +136,42 @@ class AccountFlowTests {
                   "introduction": "Documentary wedding photography"
                 }
                 """.formatted(avatarPath);
-        mockMvc.perform(put("/api/account/profile")
+        String profileJson = mockMvc.perform(put("/api/account/profile")
                         .header("Authorization", bearer(creatorToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(profileRequest))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.profileCompleted").value(true))
-                .andExpect(jsonPath("$.setupRequired").value(false));
+                .andExpect(jsonPath("$.setupRequired").value(false))
+                .andReturn().getResponse().getContentAsString();
+        Number creatorVersion = JsonPath.read(profileJson, "$.version");
 
         mockMvc.perform(get("/api/admin/creators")
                         .header("Authorization", bearer(creatorToken)))
                 .andExpect(status().isForbidden());
+
+        mockMvc.perform(delete("/api/admin/creators/{creatorId}", creatorId.longValue())
+                        .header("Authorization", bearer(adminToken))
+                        .param("version", creatorVersion.toString()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/admin/creators")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == %d)]".formatted(creatorId.longValue())).isEmpty());
+
+        mockMvc.perform(get("/api/auth/me")
+                        .header("Authorization", bearer(creatorToken)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("ACCOUNT_DISABLED"));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"mobile":"13900000009","password":"Creator@Test456"}
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
     }
 
     @Test

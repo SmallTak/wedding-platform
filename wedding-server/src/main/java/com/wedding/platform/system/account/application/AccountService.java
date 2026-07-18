@@ -71,7 +71,7 @@ public class AccountService {
         }
 
         user.setLastLoginAt(Instant.now());
-        userRepository.save(user);
+        userRepository.saveAndFlush(user);
         List<String> permissions = permissions(user.getId());
         JwtService.IssuedToken token = jwtService.issue(user, permissions);
         auditLogService.record(user.getId(), user.getAccountType(), "ACCOUNT", "LOGIN", "SYS_USER", user.getId(), "Login succeeded", ipAddress);
@@ -95,7 +95,7 @@ public class AccountService {
         }
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         user.setMustChangePassword(false);
-        userRepository.save(user);
+        userRepository.saveAndFlush(user);
         auditLogService.record(userId, user.getAccountType(), "ACCOUNT", "CHANGE_PASSWORD", "SYS_USER", userId, "Password changed", null);
         return toResponse(user, permissions(userId));
     }
@@ -118,7 +118,7 @@ public class AccountService {
             profile.setIntroduction(trimToNull(request.introduction()));
             creatorProfileRepository.save(profile);
         }
-        userRepository.save(user);
+        userRepository.saveAndFlush(user);
         auditLogService.record(userId, user.getAccountType(), "ACCOUNT", "UPDATE_PROFILE", "SYS_USER", userId, "Profile completed", null);
         return toResponse(user, permissions(userId));
     }
@@ -157,7 +157,7 @@ public class AccountService {
         user.setDeleted(false);
         user.setRoles(new HashSet<>(Set.of(creatorRole)));
         user.setProfessionalRoles(new HashSet<>(professionalRoles));
-        user = userRepository.save(user);
+        user = userRepository.saveAndFlush(user);
 
         auditLogService.record(operatorId, "ADMIN", "ACCOUNT", "CREATE_CREATOR", "SYS_USER", user.getId(), "Creator account opened", ipAddress);
         return toResponse(user, permissions(user.getId()));
@@ -167,7 +167,7 @@ public class AccountService {
     public AccountDtos.AccountResponse updateCreatorStatus(Long operatorId, Long creatorId, String status, String ipAddress) {
         SystemUser user = getCreator(creatorId);
         user.setAccountStatus(status);
-        userRepository.save(user);
+        userRepository.saveAndFlush(user);
         auditLogService.record(operatorId, "ADMIN", "ACCOUNT", "UPDATE_CREATOR_STATUS", "SYS_USER", creatorId, status, ipAddress);
         return toResponse(user, permissions(creatorId));
     }
@@ -177,9 +177,30 @@ public class AccountService {
         SystemUser user = getCreator(creatorId);
         user.setPasswordHash(passwordEncoder.encode(password));
         user.setMustChangePassword(true);
-        userRepository.save(user);
+        userRepository.saveAndFlush(user);
         auditLogService.record(operatorId, "ADMIN", "ACCOUNT", "RESET_CREATOR_PASSWORD", "SYS_USER", creatorId, "Initial password reset", ipAddress);
         return toResponse(user, permissions(creatorId));
+    }
+
+    @Transactional
+    public void deleteCreator(
+            Long operatorId,
+            Long creatorId,
+            Long version,
+            String ipAddress
+    ) {
+        SystemUser user = getCreator(creatorId);
+        if (version == null || !user.getVersion().equals(version)) {
+            throw new ApiException(HttpStatus.CONFLICT, "CREATOR_VERSION_CONFLICT",
+                    "The creator account was updated by another user; reload it before deleting");
+        }
+
+        user.setAccountStatus("DISABLED");
+        user.setDeleted(true);
+        user.setDeletedAt(Instant.now());
+        userRepository.saveAndFlush(user);
+        auditLogService.record(operatorId, "ADMIN", "ACCOUNT", "DELETE_CREATOR",
+                "SYS_USER", creatorId, "Creator account logically deleted", ipAddress);
     }
 
     @Transactional(readOnly = true)
@@ -234,6 +255,7 @@ public class AccountService {
                 roles,
                 permissions,
                 professionalRoles,
+                user.getVersion(),
                 user.getLastLoginAt(),
                 user.getCreatedAt()
         );

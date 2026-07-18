@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { ArrowLeft, CalendarDays, MapPin } from '@lucide/vue'
+import { ArrowLeft, CalendarDays, MapPin, Star } from '@lucide/vue'
 import { useRoute } from 'vue-router'
 import ContentAccessGate from '../components/ContentAccessGate.vue'
 import BrandLogo from '../components/BrandLogo.vue'
@@ -17,6 +17,7 @@ const detail = ref(null)
 
 const project = computed(() => detail.value?.project)
 const collections = computed(() => detail.value?.collections || [])
+const feedback = computed(() => detail.value?.feedback || [])
 const creatorLabel = computed(() => detail.value?.creators
   .map((creator) => {
     const roles = creator.professionalRoles.join('、')
@@ -161,6 +162,32 @@ function formatDate(value) {
         <div v-else class="public-empty">
           <h3>暂无公开作品集</h3>
           <p>该项目下的作品集会在审核发布后显示。</p>
+        </div>
+      </section>
+
+      <section v-if="feedback.length" class="project-feedback-section">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Client voices</p>
+            <h2>客户评价</h2>
+          </div>
+          <span>{{ feedback.length }} 条</span>
+        </div>
+        <div class="public-feedback-list">
+          <blockquote v-for="item in feedback" :key="item.id" class="public-feedback-item">
+            <div class="public-feedback-rating" :aria-label="`${item.rating} 星`">
+              <Star v-for="index in 5" :key="index" :size="15" :class="{ filled: index <= item.rating }" />
+            </div>
+            <p>“{{ item.content }}”</p>
+            <footer>
+              <strong>{{ item.customerDisplayName }}</strong>
+              <span>{{ item.creatorDisplayName }}</span>
+            </footer>
+            <div v-if="item.reply" class="public-feedback-reply">
+              <span>创作者回复</span>
+              <p>{{ item.reply.content }}</p>
+            </div>
+          </blockquote>
         </div>
       </section>
     </main>

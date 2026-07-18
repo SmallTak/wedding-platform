@@ -271,13 +271,14 @@ function publishProject(project) {
 async function confirmProjectPublication(settings) {
   const project = publicationProject.value
   if (!project) return
+  const republishing = project.publishStatus === 'OFFLINE'
   publishingId.value = project.id
   try {
     await reviewApi.publishProject(project.id, {
       version: project.version,
       ...settings,
     })
-    ElMessage.success('婚礼项目已发布')
+    ElMessage.success(republishing ? '婚礼项目已重新上架' : '婚礼项目已发布')
     publicationDialogVisible.value = false
     publicationProject.value = null
     await loadProjects()
@@ -348,6 +349,11 @@ async function deleteProject(project) {
 function canSubmit(project) {
   return project.publishStatus !== 'PUBLISHED'
     && ['DRAFT', 'PARTIALLY_REJECTED'].includes(project.reviewStatus)
+}
+
+function canPublish(project) {
+  return project.publishStatus === 'READY'
+    || (project.publishStatus === 'OFFLINE' && project.reviewStatus === 'APPROVED')
 }
 
 function creatorNames(project) {
@@ -428,10 +434,10 @@ function creatorNames(project) {
               <Send :size="16" />
             </button>
             <button
-              v-if="isAdmin && project.publishStatus === 'READY'"
+              v-if="isAdmin && canPublish(project)"
               type="button"
-              aria-label="发布婚礼项目"
-              title="发布婚礼项目"
+              :aria-label="project.publishStatus === 'OFFLINE' ? '重新上架婚礼项目' : '发布婚礼项目'"
+              :title="project.publishStatus === 'OFFLINE' ? '重新上架婚礼项目' : '发布婚礼项目'"
               :disabled="publishingId === project.id"
               @click="publishProject(project)"
             >
@@ -518,6 +524,7 @@ function creatorNames(project) {
     <PublicationDialog
       v-model="publicationDialogVisible"
       target-label="婚礼项目"
+      :action-label="publicationProject?.publishStatus === 'OFFLINE' ? '重新上架' : '发布'"
       :loading="Boolean(publicationProject && publishingId === publicationProject.id)"
       @submit="confirmProjectPublication"
     />

@@ -3,11 +3,15 @@ const errorMessages = {
   TAG_NAME_EXISTS: '标签名称已存在',
   CATEGORY_VERSION_CONFLICT: '分类已被其他人修改，请刷新后重试',
   TAG_VERSION_CONFLICT: '标签已被其他人修改，请刷新后重试',
+  CATEGORY_IN_USE: '该分类仍被作品集使用，请先调整相关作品集',
+  TAG_IN_USE: '该标签仍被作品集使用，请先调整相关作品集',
+  CREATOR_VERSION_CONFLICT: '创作者账号已被其他人修改，请刷新后重试',
   PROJECT_VERSION_CONFLICT: '项目已被其他人修改，请重新打开后编辑',
   PROJECT_PUBLISHED_LOCKED: '已发布项目需先下架后再修改或删除',
   PROJECT_ALREADY_PENDING: '当前项目已经提交审核',
   PROJECT_NOT_PENDING: '当前项目不在待审核状态',
   PROJECT_FIELDS_NOT_APPROVED: '项目仍有字段未通过审核',
+  PROJECT_NOT_READY: '项目内容已发生变化，请重新提交并审核通过后再上架',
   PROJECT_COLLECTIONS_EXIST: '请先删除该项目下的作品集，再删除婚礼项目',
   PROJECT_CREATOR_INVALID: '选择的创作者不存在、已停用或账号无效',
   COLLECTION_VERSION_CONFLICT: '作品集已被其他人修改，页面将重新加载',
@@ -31,7 +35,7 @@ const errorMessages = {
   COLLECTION_FIELDS_NOT_APPROVED: '作品集仍有字段未通过审核',
   COLLECTION_NOT_PENDING: '当前作品集不在待审核状态',
   COLLECTION_ALREADY_PENDING: '当前作品集已经提交审核',
-  COLLECTION_NOT_READY: '作品集尚未达到可发布状态',
+  COLLECTION_NOT_READY: '作品集内容已发生变化，请重新提交并审核通过后再上架',
   COLLECTION_NOT_PUBLISHED: '当前作品集尚未发布',
   REJECTION_REASON_REQUIRED: '驳回时必须填写原因',
   PHOTO_REVIEW_SELECTION_INVALID: '请选择当前作品集中的待审核图片',
@@ -39,6 +43,18 @@ const errorMessages = {
   NO_PENDING_FIELDS: '当前没有待审核字段',
   NO_REVIEW_CHANGES: '请先修改被驳回内容或新增待审内容',
   ACCESS_PASSWORD_INVALID: '访问密码需为 6 至 64 个字符，且不能超过 72 字节',
+  FEEDBACK_VERSION_CONFLICT: '评价已被其他人修改，请刷新后重试',
+  FEEDBACK_REPLY_VERSION_CONFLICT: '回复已被其他人修改，请刷新后重试',
+  FEEDBACK_CREATOR_NOT_IN_PROJECT: '被评价创作者必须是所选项目的参与者',
+  FEEDBACK_PROJECT_NOT_PUBLIC: '只有已公开发布的婚礼项目才能公开客户评价',
+  FEEDBACK_PUBLISHED_LOCKED: '已公开或已下架评价不能继续编辑',
+  FEEDBACK_WITHDRAW_LOCKED: '已公开或已下架评价不能撤回',
+  FEEDBACK_EDIT_ACCESS_DENIED: '只有管理员或原提交人可以修改、撤回该评价',
+  FEEDBACK_REPLY_PUBLISHED_LOCKED: '已通过的公开回复不能继续编辑',
+  INQUIRY_VERSION_CONFLICT: '咨询线索已被其他人更新，请刷新后重试',
+  HOMEPAGE_FEATURE_TARGET_INVALID: '首页推荐只能选择当前公开发布的内容',
+  HOMEPAGE_FEATURE_LIMIT: '首页最多推荐 6 个项目、12 个作品集和 6 条评价',
+  HOMEPAGE_FEATURE_DUPLICATE: '同一内容不能重复加入首页推荐',
   VERSION_CONFLICT: '数据已被其他人修改，请刷新后重试',
   VALIDATION_ERROR: '提交内容不完整或格式不正确',
 }
@@ -55,6 +71,10 @@ export function isVersionConflict(error) {
     'COLLECTION_VERSION_CONFLICT',
     'CATEGORY_VERSION_CONFLICT',
     'TAG_VERSION_CONFLICT',
+    'CREATOR_VERSION_CONFLICT',
+    'FEEDBACK_VERSION_CONFLICT',
+    'FEEDBACK_REPLY_VERSION_CONFLICT',
+    'INQUIRY_VERSION_CONFLICT',
   ].includes(error.response?.data?.code)
 }
 
@@ -117,8 +137,8 @@ export const publishStatusLabels = {
 }
 
 export function statusTone(value) {
-  if (['ACTIVE', 'APPROVED', 'READY', 'PUBLISHED', 'PUBLIC'].includes(value)) return 'positive'
-  if (['REJECTED', 'PARTIALLY_REJECTED', 'DISABLED'].includes(value)) return 'negative'
-  if (['PENDING'].includes(value)) return 'warning'
+  if (['ACTIVE', 'APPROVED', 'READY', 'PUBLISHED', 'PUBLIC', 'COMPLETED'].includes(value)) return 'positive'
+  if (['REJECTED', 'PARTIALLY_REJECTED', 'DISABLED', 'INVALID'].includes(value)) return 'negative'
+  if (['PENDING', 'NEW', 'FOLLOWING'].includes(value)) return 'warning'
   return 'neutral'
 }

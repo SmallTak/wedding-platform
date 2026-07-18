@@ -17,4 +17,13 @@ public interface CollectionTagRepository extends JpaRepository<CollectionTag, Co
             ORDER BY relation.createdAt ASC
             """)
     List<CollectionTag> findAllByCollectionId(@Param("collectionId") Long collectionId);
+
+    @Query("""
+            SELECT COUNT(relation)
+            FROM CollectionTag relation, WorkCollection work
+            WHERE relation.id.tagId = :tagId
+              AND work.id = relation.id.collectionId
+              AND work.deleted = false
+            """)
+    long countActiveCollectionReferences(@Param("tagId") Long tagId);
 }

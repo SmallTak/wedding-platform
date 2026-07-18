@@ -322,6 +322,7 @@ function publishCollection(collection) {
 async function confirmCollectionPublication(settings) {
   const collection = publicationCollection.value
   if (!collection) return
+  const republishing = collection.publishStatus === 'OFFLINE'
   publishingId.value = collection.id
   try {
     await reviewApi.publish(collection.id, {
@@ -331,7 +332,7 @@ async function confirmCollectionPublication(settings) {
       pinned: collection.pinned || false,
       sortOrder: collection.sortOrder || 0,
     })
-    ElMessage.success('作品集已发布')
+    ElMessage.success(republishing ? '作品集已重新上架' : '作品集已发布')
     publicationDialogVisible.value = false
     publicationCollection.value = null
     await loadCollections()
@@ -397,6 +398,11 @@ async function deleteCollection(collection) {
   } finally {
     deletingId.value = null
   }
+}
+
+function canPublish(collection) {
+  return collection.publishStatus === 'READY'
+    || (collection.publishStatus === 'OFFLINE' && collection.reviewStatus === 'APPROVED')
 }
 </script>
 
@@ -495,10 +501,10 @@ async function deleteCollection(collection) {
               <UsersRound :size="16" />
             </button>
             <button
-              v-if="isAdmin && collection.publishStatus === 'READY'"
+              v-if="isAdmin && canPublish(collection)"
               type="button"
-              aria-label="发布作品集"
-              title="发布作品集"
+              :aria-label="collection.publishStatus === 'OFFLINE' ? '重新上架作品集' : '发布作品集'"
+              :title="collection.publishStatus === 'OFFLINE' ? '重新上架作品集' : '发布作品集'"
               :disabled="publishingId === collection.id"
               @click="publishCollection(collection)"
             >
@@ -624,6 +630,7 @@ async function deleteCollection(collection) {
     <PublicationDialog
       v-model="publicationDialogVisible"
       target-label="作品集"
+      :action-label="publicationCollection?.publishStatus === 'OFFLINE' ? '重新上架' : '发布'"
       :loading="publishingId !== null"
       @submit="confirmCollectionPublication"
     />

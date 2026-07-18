@@ -8,11 +8,13 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -54,6 +56,17 @@ public class ContentConfigAdminController {
         return contentConfigService.updateCategory(userId(jwt), categoryId, request, clientIp(servletRequest));
     }
 
+    @DeleteMapping("/categories/{categoryId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteCategory(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long categoryId,
+            @RequestParam Long version,
+            HttpServletRequest servletRequest
+    ) {
+        contentConfigService.deleteCategory(userId(jwt), categoryId, version, clientIp(servletRequest));
+    }
+
     @GetMapping("/tags")
     public List<ContentConfigDtos.TagResponse> tags(@AuthenticationPrincipal Jwt jwt) {
         return contentConfigService.listTags(userId(jwt));
@@ -77,6 +90,17 @@ public class ContentConfigAdminController {
             HttpServletRequest servletRequest
     ) {
         return contentConfigService.updateTag(userId(jwt), tagId, request, clientIp(servletRequest));
+    }
+
+    @DeleteMapping("/tags/{tagId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteTag(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long tagId,
+            @RequestParam Long version,
+            HttpServletRequest servletRequest
+    ) {
+        contentConfigService.deleteTag(userId(jwt), tagId, version, clientIp(servletRequest));
     }
 
     private Long userId(Jwt jwt) {

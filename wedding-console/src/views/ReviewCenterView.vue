@@ -73,6 +73,13 @@ const emptyQueueMessage = computed(() => (
     ? '暂无待审核内容'
     : '暂无符合条件的审核内容'
 ))
+const canPublishTarget = computed(() => (
+  currentTarget.value?.publishStatus === 'READY'
+    || (
+      currentTarget.value?.publishStatus === 'OFFLINE'
+      && currentTarget.value?.reviewStatus === 'APPROVED'
+    )
+))
 
 onMounted(loadQueue)
 
@@ -270,6 +277,7 @@ function publishTarget() {
 
 async function confirmPublication(settings) {
   if (!currentTarget.value) return
+  const republishing = currentTarget.value.publishStatus === 'OFFLINE'
   await runTargetMutation(
     () => isProject.value
       ? reviewApi.publishProject(currentTarget.value.id, {
@@ -283,7 +291,9 @@ async function confirmPublication(settings) {
           pinned: currentTarget.value.pinned || false,
           sortOrder: currentTarget.value.sortOrder || 0,
         }),
-    isProject.value ? '婚礼项目已发布' : '作品集已发布',
+    isProject.value
+      ? (republishing ? '婚礼项目已重新上架' : '婚礼项目已发布')
+      : (republishing ? '作品集已重新上架' : '作品集已发布'),
     isProject.value ? '婚礼项目发布失败' : '作品集发布失败',
   )
   if (currentTarget.value?.publishStatus === 'PUBLISHED') {
@@ -350,6 +360,11 @@ async function reloadDetail() {
     detailVisible.value = false
   }
 }
+
+function canPublish(item) {
+  return item.publishStatus === 'READY'
+    || (item.publishStatus === 'OFFLINE' && item.reviewStatus === 'APPROVED')
+}
 </script>
 
 <template>
@@ -357,7 +372,7 @@ async function reloadDetail() {
     <section class="management-summary" aria-label="审核概览">
       <div><span>队列内容</span><strong>{{ totalElements }}</strong></div>
       <div><span>本页待审核</span><strong>{{ queue.filter((item) => item.reviewStatus === 'PENDING').length }}</strong></div>
-      <div><span>本页可发布</span><strong>{{ queue.filter((item) => item.publishStatus === 'READY').length }}</strong></div>
+      <div><span>本页可发布</span><strong>{{ queue.filter(canPublish).length }}</strong></div>
     </section>
 
     <section class="dashboard-section management-panel">
@@ -620,12 +635,12 @@ async function reloadDetail() {
                   @click="approveRemainingFields"
                 ><Check :size="16" />通过剩余字段</button>
                 <button
-                  v-if="currentTarget.publishStatus === 'READY'"
+                  v-if="canPublishTarget"
                   class="primary-command compact-command"
                   type="button"
                   :disabled="mutating"
                   @click="publishTarget"
-                ><Rocket :size="16" />公开发布</button>
+                ><Rocket :size="16" />{{ currentTarget.publishStatus === 'OFFLINE' ? '重新上架' : '公开发布' }}</button>
               </template>
             </div>
           </section>
@@ -636,6 +651,7 @@ async function reloadDetail() {
     <PublicationDialog
       v-model="publicationDialogVisible"
       :target-label="isProject ? '婚礼项目' : '作品集'"
+      :action-label="currentTarget?.publishStatus === 'OFFLINE' ? '重新上架' : '发布'"
       :loading="mutating"
       @submit="confirmPublication"
     />

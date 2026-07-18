@@ -34,6 +34,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -149,6 +150,9 @@ public class ProjectService {
         requireEditable(project);
         requireVersion(project, request.version());
 
+        if (!projectDetailsChanged(project, request)) {
+            return toResponse(project);
+        }
         reviewRevisionService.ensureProjectBaseline(project);
         reviewRevisionService.cancelPendingSubmission(ReviewTargetType.PROJECT, projectId, operatorId);
         applyProjectFields(project, request.title(), request.coupleDisplayName(), request.eventDate(),
@@ -203,6 +207,7 @@ public class ProjectService {
             throw new ApiException(HttpStatus.FORBIDDEN, "ADMIN_REQUIRED", "Only administrators can assign project creators");
         }
         WeddingProject project = getProject(projectId);
+        requireEditable(project);
         requireVersion(project, request.version());
 
         LinkedHashSet<Long> desiredCreatorIds = new LinkedHashSet<>(request.creatorUserIds());
@@ -224,6 +229,12 @@ public class ProjectService {
         List<ProjectCreator> existingRelations = projectCreatorRepository.findAllByProjectId(projectId);
         Map<Long, ProjectCreator> existingByCreatorId = existingRelations.stream()
                 .collect(Collectors.toMap(relation -> relation.getId().getCreatorUserId(), Function.identity()));
+        if (existingByCreatorId.keySet().equals(desiredCreatorIds)) {
+            return toResponse(project);
+        }
+
+        reviewRevisionService.ensureProjectBaseline(project);
+        reviewRevisionService.cancelPendingSubmission(ReviewTargetType.PROJECT, projectId, operatorId);
         List<ProjectCreator> removedRelations = existingRelations.stream()
                 .filter(relation -> !desiredCreatorIds.contains(relation.getId().getCreatorUserId()))
                 .toList();
@@ -242,6 +253,7 @@ public class ProjectService {
                 .toList();
         projectCreatorRepository.saveAll(newRelations);
 
+        markContentChanged(project);
         project.setUpdatedBy(operatorId);
         project.setUpdatedAt(Instant.now());
         project = projectRepository.saveAndFlush(project);
@@ -266,6 +278,18 @@ public class ProjectService {
         project.setRegionCode(regionCode.trim());
         project.setLocationText(locationText.trim());
         project.setDescription(trimToNull(description));
+    }
+
+    private boolean projectDetailsChanged(
+            WeddingProject project,
+            ProjectDtos.UpdateProjectRequest request
+    ) {
+        return !Objects.equals(project.getTitle(), request.title().trim())
+                || !Objects.equals(project.getCoupleDisplayName(), trimToNull(request.coupleDisplayName()))
+                || !Objects.equals(project.getEventDate(), request.eventDate())
+                || !Objects.equals(project.getRegionCode(), request.regionCode().trim())
+                || !Objects.equals(project.getLocationText(), request.locationText().trim())
+                || !Objects.equals(project.getDescription(), trimToNull(request.description()));
     }
 
     private void validateActiveCreators(Set<Long> creatorIds) {

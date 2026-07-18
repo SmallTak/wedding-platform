@@ -1,5 +1,7 @@
 package com.wedding.platform.content.publication.web;
 
+import com.wedding.platform.operations.feedback.web.PublicFeedbackDtos;
+
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -33,7 +35,8 @@ public final class PublicProjectDtos {
     public record ProjectDetail(
             ProjectSummary project,
             List<CreatorSummary> creators,
-            List<PublicCollectionDtos.CollectionSummary> collections
+            List<PublicCollectionDtos.CollectionSummary> collections,
+            List<PublicFeedbackDtos.Feedback> feedback
     ) {
     }
 

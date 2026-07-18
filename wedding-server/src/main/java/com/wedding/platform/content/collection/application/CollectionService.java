@@ -41,6 +41,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -195,10 +196,6 @@ public class CollectionService {
         requireEditable(collection);
         requireVersion(collection, request.version());
 
-        List<CollectionPhoto> activePhotos = photoRepository
-                .findAllByCollectionIdAndDeletedFalseOrderBySortOrderAscIdAsc(collectionId);
-        reviewRevisionService.ensureCollectionBaseline(collection, activePhotos);
-        reviewRevisionService.cancelPendingSubmission(ReviewTargetType.COLLECTION, collectionId, operatorId);
         WeddingProject project = request.projectId() == null
                 ? null
                 : getAccessibleProject(actor, request.projectId());
@@ -216,6 +213,13 @@ public class CollectionService {
         LinkedHashSet<Long> tagIds = distinctTagIds(request.tagIds());
         loadSelectableTags(tagIds, existingTagIds);
 
+        if (!collectionDetailsChanged(collection, project, request, category, existingTagIds, tagIds)) {
+            return toResponse(collection);
+        }
+        List<CollectionPhoto> activePhotos = photoRepository
+                .findAllByCollectionIdAndDeletedFalseOrderBySortOrderAscIdAsc(collectionId);
+        reviewRevisionService.ensureCollectionBaseline(collection, activePhotos);
+        reviewRevisionService.cancelPendingSubmission(ReviewTargetType.COLLECTION, collectionId, operatorId);
         applyFields(collection, project, request.title(), request.description(), category);
         replaceTags(collectionId, tagIds);
         markContentChanged(collection, operatorId);
@@ -295,6 +299,14 @@ public class CollectionService {
         List<CollectionCreator> existingRelations = collectionCreatorRepository.findAllByCollectionId(collectionId);
         Map<Long, CollectionCreator> existingByCreatorId = existingRelations.stream()
                 .collect(Collectors.toMap(relation -> relation.getId().getCreatorUserId(), Function.identity()));
+        if (existingByCreatorId.keySet().equals(desiredCreatorIds)) {
+            return toResponse(collection);
+        }
+
+        List<CollectionPhoto> activePhotos = photoRepository
+                .findAllByCollectionIdAndDeletedFalseOrderBySortOrderAscIdAsc(collectionId);
+        reviewRevisionService.ensureCollectionBaseline(collection, activePhotos);
+        reviewRevisionService.cancelPendingSubmission(ReviewTargetType.COLLECTION, collectionId, operatorId);
         collectionCreatorRepository.deleteAll(existingRelations.stream()
                 .filter(relation -> !desiredCreatorIds.contains(relation.getId().getCreatorUserId()))
                 .toList());
@@ -310,6 +322,7 @@ public class CollectionService {
                 })
                 .toList());
 
+        markContentChanged(collection, operatorId);
         collection.setUpdatedBy(operatorId);
         collection.setUpdatedAt(Instant.now());
         collection = collectionRepository.saveAndFlush(collection);
@@ -331,6 +344,22 @@ public class CollectionService {
         collection.setTitle(title.trim());
         collection.setDescription(trimToNull(description));
         collection.setCategoryId(category.getId());
+    }
+
+    private boolean collectionDetailsChanged(
+            WorkCollection collection,
+            WeddingProject project,
+            CollectionDtos.UpdateCollectionRequest request,
+            ContentCategory category,
+            Set<Long> existingTagIds,
+            Set<Long> requestedTagIds
+    ) {
+        Long projectId = project == null ? null : project.getId();
+        return !Objects.equals(collection.getProjectId(), projectId)
+                || !Objects.equals(collection.getTitle(), request.title().trim())
+                || !Objects.equals(collection.getDescription(), trimToNull(request.description()))
+                || !Objects.equals(collection.getCategoryId(), category.getId())
+                || !existingTagIds.equals(requestedTagIds);
     }
 
     private void replaceTags(Long collectionId, LinkedHashSet<Long> desiredTagIds) {

@@ -6,6 +6,12 @@ import com.wedding.platform.content.collection.persistence.entity.ContentTag;
 import com.wedding.platform.content.collection.persistence.repository.ContentCategoryRepository;
 import com.wedding.platform.content.collection.persistence.repository.ContentTagRepository;
 import com.wedding.platform.content.collection.persistence.repository.WorkCollectionRepository;
+import com.wedding.platform.content.media.persistence.entity.CollectionPhoto;
+import com.wedding.platform.content.media.persistence.repository.CollectionPhotoRepository;
+import com.wedding.platform.content.review.application.ReviewRevisionService;
+import com.wedding.platform.content.shared.ContentVisibility;
+import com.wedding.platform.content.shared.PublishStatus;
+import com.wedding.platform.content.shared.ReviewStatus;
 import jakarta.servlet.http.Cookie;
 import com.wedding.platform.system.account.persistence.entity.SystemRole;
 import com.wedding.platform.system.account.persistence.entity.SystemUser;
@@ -28,6 +34,7 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -72,6 +79,12 @@ class CollectionReviewFlowTests {
 
     @Autowired
     private WorkCollectionRepository collectionRepository;
+
+    @Autowired
+    private CollectionPhotoRepository photoRepository;
+
+    @Autowired
+    private ReviewRevisionService reviewRevisionService;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -191,7 +204,7 @@ class CollectionReviewFlowTests {
                 .andExpect(jsonPath("$.collection.reviewStatus").value("PENDING"))
                 .andExpect(jsonPath(
                         "$.reviewHistory.currentItems[?(@.itemType == 'FIELD' && @.status == 'APPROVED')]",
-                        hasSize(6)
+                        hasSize(7)
                 ))
                 .andReturn().getResponse().getContentAsString();
         Number approvedFieldsVersion = JsonPath.read(approvedFieldsJson, "$.collection.version");
@@ -370,6 +383,65 @@ class CollectionReviewFlowTests {
                         .cookie(accessCookie))
                 .andExpect(status().isNotFound());
 
+        String unchangedOfflineJson = mockMvc.perform(put(
+                                "/api/collections/{collectionId}", collectionId.longValue())
+                        .header("Authorization", bearer(ownerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "version": %d,
+                                  "projectId": null,
+                                  "title": "Published Review Story",
+                                  "description": "A collection moving through the complete review workflow",
+                                  "categoryId": %d,
+                                  "tagIds": [%d]
+                                }
+                                """.formatted(offlineVersion.longValue(), category.getId(), tag.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reviewStatus").value("APPROVED"))
+                .andExpect(jsonPath("$.publishStatus").value("OFFLINE"))
+                .andReturn().getResponse().getContentAsString();
+        Number unchangedOfflineVersion = JsonPath.read(unchangedOfflineJson, "$.version");
+        org.junit.jupiter.api.Assertions.assertEquals(
+                offlineVersion.longValue(),
+                unchangedOfflineVersion.longValue()
+        );
+
+        String republishedJson = mockMvc.perform(post(
+                                "/api/admin/reviews/collections/{collectionId}/publish",
+                                collectionId.longValue())
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "version": %d,
+                                  "visibility": "PUBLIC",
+                                  "featured": false,
+                                  "pinned": false,
+                                  "sortOrder": 0
+                                }
+                                """.formatted(unchangedOfflineVersion.longValue())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.collection.publishStatus").value("PUBLISHED"))
+                .andReturn().getResponse().getContentAsString();
+        Number republishedVersion = JsonPath.read(republishedJson, "$.collection.version");
+
+        String secondOfflineJson = mockMvc.perform(post(
+                                "/api/admin/reviews/collections/{collectionId}/offline",
+                                collectionId.longValue())
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "version": %d,
+                                  "reason": "Prepare a reviewed content revision"
+                                }
+                                """.formatted(republishedVersion.longValue())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.collection.publishStatus").value("OFFLINE"))
+                .andReturn().getResponse().getContentAsString();
+        Number secondOfflineVersion = JsonPath.read(secondOfflineJson, "$.collection.version");
+
         String updatedOfflineJson = mockMvc.perform(put(
                                 "/api/collections/{collectionId}", collectionId.longValue())
                         .header("Authorization", bearer(ownerToken))
@@ -383,12 +455,27 @@ class CollectionReviewFlowTests {
                                   "categoryId": %d,
                                   "tagIds": [%d]
                                 }
-                                """.formatted(offlineVersion.longValue(), category.getId(), tag.getId())))
+                                """.formatted(secondOfflineVersion.longValue(), category.getId(), tag.getId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reviewStatus").value("DRAFT"))
                 .andExpect(jsonPath("$.publishStatus").value("OFFLINE"))
                 .andReturn().getResponse().getContentAsString();
         Number updatedOfflineVersion = JsonPath.read(updatedOfflineJson, "$.version");
+
+        mockMvc.perform(post("/api/admin/reviews/collections/{collectionId}/publish", collectionId.longValue())
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "version": %d,
+                                  "visibility": "PUBLIC",
+                                  "featured": false,
+                                  "pinned": false,
+                                  "sortOrder": 0
+                                }
+                                """.formatted(updatedOfflineVersion.longValue())))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("COLLECTION_NOT_READY"));
 
         String resubmitJson = mockMvc.perform(post(
                                 "/api/collections/{collectionId}/submit", collectionId.longValue())
@@ -406,6 +493,212 @@ class CollectionReviewFlowTests {
                         .header("Authorization", bearer(adminToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.publishedCollections").isNumber());
+    }
+
+    @Test
+    void approvedCreatorPhotoDeletionAndOrderChangesRequireAnotherReview() throws Exception {
+        String adminToken = login(ADMIN_MOBILE);
+        String ownerToken = login(OWNER_MOBILE);
+
+        ApprovedOfflineCollection reordered = createApprovedOfflineCollection(
+                ownerToken,
+                "Approved Offline Reorder Story"
+        );
+        mockMvc.perform(put("/api/collections/{collectionId}/photos/order", reordered.id())
+                        .header("Authorization", bearer(ownerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "version": %d,
+                                  "photoIds": [%d, %d]
+                                }
+                                """.formatted(
+                                reordered.version(),
+                                reordered.firstPhotoId(),
+                                reordered.secondPhotoId()
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.collectionVersion").value(reordered.version()));
+
+        String reorderedJson = mockMvc.perform(put(
+                                "/api/collections/{collectionId}/photos/order", reordered.id())
+                        .header("Authorization", bearer(ownerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "version": %d,
+                                  "photoIds": [%d, %d]
+                                }
+                                """.formatted(
+                                reordered.version(),
+                                reordered.secondPhotoId(),
+                                reordered.firstPhotoId()
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.photos[0].reviewStatus").value("DRAFT"))
+                .andExpect(jsonPath("$.photos[1].reviewStatus").value("DRAFT"))
+                .andReturn().getResponse().getContentAsString();
+        Number reorderedVersion = JsonPath.read(reorderedJson, "$.collectionVersion");
+
+        mockMvc.perform(get("/api/collections/{collectionId}", reordered.id())
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reviewStatus").value("DRAFT"))
+                .andExpect(jsonPath("$.publishStatus").value("OFFLINE"));
+        assertCollectionPublishRejected(adminToken, reordered.id(), reorderedVersion.longValue());
+
+        ApprovedOfflineCollection deleted = createApprovedOfflineCollection(
+                ownerToken,
+                "Approved Offline Delete Story"
+        );
+        String deletedJson = mockMvc.perform(delete(
+                                "/api/collections/{collectionId}/photos/{photoId}",
+                                deleted.id(),
+                                deleted.secondPhotoId())
+                        .header("Authorization", bearer(ownerToken))
+                        .param("version", String.valueOf(deleted.version())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.photos.length()").value(1))
+                .andExpect(jsonPath("$.photos[0].reviewStatus").value("DRAFT"))
+                .andReturn().getResponse().getContentAsString();
+        Number deletedVersion = JsonPath.read(deletedJson, "$.collectionVersion");
+
+        mockMvc.perform(get("/api/collections/{collectionId}", deleted.id())
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reviewStatus").value("DRAFT"))
+                .andExpect(jsonPath("$.publishStatus").value("OFFLINE"));
+        assertCollectionPublishRejected(adminToken, deleted.id(), deletedVersion.longValue());
+
+        ApprovedOfflineCollection creatorsChanged = createApprovedOfflineCollection(
+                ownerToken,
+                "Approved Offline Creator Story"
+        );
+        SystemUser outsider = userRepository.findByMobileAndDeletedFalse(OUTSIDER_MOBILE).orElseThrow();
+        String creatorsChangedJson = mockMvc.perform(put(
+                                "/api/admin/collections/{collectionId}/creators", creatorsChanged.id())
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "version": %d,
+                                  "creatorUserIds": [%d]
+                                }
+                                """.formatted(creatorsChanged.version(), outsider.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reviewStatus").value("DRAFT"))
+                .andExpect(jsonPath("$.publishStatus").value("OFFLINE"))
+                .andReturn().getResponse().getContentAsString();
+        Number creatorsChangedVersion = JsonPath.read(creatorsChangedJson, "$.version");
+        assertCollectionPublishRejected(
+                adminToken,
+                creatorsChanged.id(),
+                creatorsChangedVersion.longValue()
+        );
+    }
+
+    private ApprovedOfflineCollection createApprovedOfflineCollection(
+            String ownerToken,
+            String title
+    ) throws Exception {
+        String collectionJson = mockMvc.perform(post("/api/collections")
+                        .header("Authorization", bearer(ownerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "projectId": null,
+                                  "title": "%s",
+                                  "description": "Approved offline photo regression fixture",
+                                  "categoryId": %d,
+                                  "tagIds": [%d]
+                                }
+                                """.formatted(title, category.getId(), tag.getId())))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Number collectionId = JsonPath.read(collectionJson, "$.id");
+
+        String uploadJson = mockMvc.perform(multipart(
+                                "/api/collections/{collectionId}/photos", collectionId.longValue())
+                        .file(new MockMultipartFile(
+                                "files",
+                                "first.jpg",
+                                MediaType.IMAGE_JPEG_VALUE,
+                                image(640, 480, new Color(84, 62, 44))
+                        ))
+                        .file(new MockMultipartFile(
+                                "files",
+                                "second.jpg",
+                                MediaType.IMAGE_JPEG_VALUE,
+                                image(480, 640, new Color(48, 70, 92))
+                        ))
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        Number uploadVersion = JsonPath.read(uploadJson, "$.collectionVersion");
+        Number firstPhotoId = JsonPath.read(uploadJson, "$.photos[0].id");
+        Number secondPhotoId = JsonPath.read(uploadJson, "$.photos[1].id");
+
+        mockMvc.perform(put("/api/collections/{collectionId}/cover", collectionId.longValue())
+                        .header("Authorization", bearer(ownerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "version": %d,
+                                  "photoId": %d
+                                }
+                                """.formatted(uploadVersion.longValue(), firstPhotoId.longValue())))
+                .andExpect(status().isOk());
+
+        List<CollectionPhoto> photos = photoRepository
+                .findAllByCollectionIdAndDeletedFalseOrderBySortOrderAscIdAsc(collectionId.longValue());
+        Instant reviewedAt = Instant.now();
+        photos.forEach(photo -> {
+            photo.setReviewStatus(ReviewStatus.APPROVED);
+            photo.setReviewedAt(reviewedAt);
+            photo.setReviewedBy(admin.getId());
+        });
+        photoRepository.saveAllAndFlush(photos);
+
+        var collection = collectionRepository.findByIdAndDeletedFalse(collectionId.longValue()).orElseThrow();
+        collection.setReviewStatus(ReviewStatus.APPROVED);
+        collection.setPublishStatus(PublishStatus.OFFLINE);
+        collection.setVisibility(ContentVisibility.PUBLIC);
+        collection.setReviewedAt(reviewedAt);
+        collection.setReviewedBy(admin.getId());
+        collection.setPublishedAt(reviewedAt);
+        collection.setPublishedBy(admin.getId());
+        collection.setOfflineReason("Regression fixture");
+        collection.setUpdatedBy(admin.getId());
+        collection = collectionRepository.saveAndFlush(collection);
+        reviewRevisionService.ensureCollectionBaseline(collection, photos);
+
+        return new ApprovedOfflineCollection(
+                collection.getId(),
+                collection.getVersion(),
+                firstPhotoId.longValue(),
+                secondPhotoId.longValue()
+        );
+    }
+
+    private void assertCollectionPublishRejected(
+            String adminToken,
+            long collectionId,
+            long version
+    ) throws Exception {
+        mockMvc.perform(post("/api/admin/reviews/collections/{collectionId}/publish", collectionId)
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "version": %d,
+                                  "visibility": "PUBLIC",
+                                  "featured": false,
+                                  "pinned": false,
+                                  "sortOrder": 0
+                                }
+                                """.formatted(version)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("COLLECTION_NOT_READY"));
     }
 
     private byte[] image(int width, int height, Color color) throws Exception {
@@ -495,5 +788,13 @@ class CollectionReviewFlowTests {
 
     private String bearer(String token) {
         return "Bearer " + token;
+    }
+
+    private record ApprovedOfflineCollection(
+            long id,
+            long version,
+            long firstPhotoId,
+            long secondPhotoId
+    ) {
     }
 }

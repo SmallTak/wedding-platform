@@ -11,6 +11,7 @@ import com.wedding.platform.content.publication.web.PublicCollectionDtos;
 import com.wedding.platform.content.publication.web.PublicProjectDtos;
 import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
+import com.wedding.platform.operations.feedback.application.PublicFeedbackService;
 import com.wedding.platform.platform.web.ApiException;
 import com.wedding.platform.system.account.persistence.entity.ProfessionalRole;
 import com.wedding.platform.system.account.persistence.entity.SystemUser;
@@ -23,9 +24,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.Comparator;
+import java.util.function.Function;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class PublicProjectService {
@@ -38,6 +41,7 @@ public class PublicProjectService {
     private final SystemUserRepository userRepository;
     private final PublicCollectionService collectionService;
     private final PublicContentAccessService contentAccessService;
+    private final PublicFeedbackService feedbackService;
 
     public PublicProjectService(
             WeddingProjectRepository projectRepository,
@@ -45,7 +49,8 @@ public class PublicProjectService {
             MediaAssetRepository assetRepository,
             SystemUserRepository userRepository,
             PublicCollectionService collectionService,
-            PublicContentAccessService contentAccessService
+            PublicContentAccessService contentAccessService,
+            PublicFeedbackService feedbackService
     ) {
         this.projectRepository = projectRepository;
         this.projectCreatorRepository = projectCreatorRepository;
@@ -53,6 +58,7 @@ public class PublicProjectService {
         this.userRepository = userRepository;
         this.collectionService = collectionService;
         this.contentAccessService = contentAccessService;
+        this.feedbackService = feedbackService;
     }
 
     @Transactional(readOnly = true)
@@ -83,13 +89,50 @@ public class PublicProjectService {
     }
 
     @Transactional(readOnly = true)
+    public List<PublicProjectDtos.ProjectSummary> latestProjects(int size) {
+        int limitedSize = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
+        return projectRepository.findLatestPublicProjects(
+                        PublishStatus.PUBLISHED,
+                        ContentVisibility.PUBLIC,
+                        PageRequest.of(0, limitedSize))
+                .stream()
+                .map(this::toSummary)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<PublicProjectDtos.ProjectSummary> projectsByIds(List<Long> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, WeddingProject> byId = projectRepository.findAllById(ids).stream()
+                .filter(project -> !Boolean.TRUE.equals(project.getDeleted()))
+                .filter(project -> PublishStatus.PUBLISHED == project.getPublishStatus())
+                .filter(project -> ContentVisibility.PUBLIC == project.getVisibility())
+                .collect(Collectors.toMap(WeddingProject::getId, Function.identity()));
+        return ids.stream()
+                .map(byId::get)
+                .filter(project -> project != null)
+                .map(this::toSummary)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isPublicProject(Long projectId) {
+        return projectRepository.findByIdAndDeletedFalseAndPublishStatus(projectId, PublishStatus.PUBLISHED)
+                .filter(project -> ContentVisibility.PUBLIC == project.getVisibility())
+                .isPresent();
+    }
+
+    @Transactional(readOnly = true)
     public PublicProjectDtos.ProjectDetail project(Long projectId, String accessToken) {
         WeddingProject project = publishedProject(projectId);
         requireAccess(project, accessToken);
         return new PublicProjectDtos.ProjectDetail(
                 toSummary(project),
                 creators(projectId),
-                collectionService.projectCollections(projectId)
+                collectionService.projectCollections(projectId),
+                feedbackService.projectFeedback(projectId)
         );
     }
 

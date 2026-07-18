@@ -17,4 +17,8 @@ public interface ContentCategoryRepository extends JpaRepository<ContentCategory
     boolean existsByNameIgnoreCaseAndDeletedFalse(String name);
 
     boolean existsByNameIgnoreCaseAndDeletedFalseAndIdNot(String name, Long id);
+
+    boolean existsByNameIgnoreCase(String name);
+
+    boolean existsByNameIgnoreCaseAndIdNot(String name, Long id);
 }

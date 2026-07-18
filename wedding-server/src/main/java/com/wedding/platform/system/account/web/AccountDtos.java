@@ -91,6 +91,7 @@ public final class AccountDtos {
             List<String> roles,
             List<String> permissions,
             List<ProfessionalRoleResponse> professionalRoles,
+            Long version,
             Instant lastLoginAt,
             Instant createdAt
     ) {

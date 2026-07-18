@@ -1,11 +1,12 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { KeyRound, Power, Search, UserPlus } from '@lucide/vue'
+import { KeyRound, Power, Search, Trash2, UserPlus } from '@lucide/vue'
 import http from '../api/http'
 
 const loading = ref(false)
 const saving = ref(false)
+const deletingId = ref(null)
 const dialogVisible = ref(false)
 const query = ref('')
 const creators = ref([])
@@ -97,6 +98,38 @@ async function resetPassword(creator) {
   }
 }
 
+async function deleteCreator(creator) {
+  const label = creator.displayName || creator.mobile
+  try {
+    await ElMessageBox.confirm(
+      `确认删除“${label}”？该账号将立即无法登录，但历史项目、作品集和审计记录会保留。`,
+      '删除创作者账号',
+      {
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+
+  deletingId.value = creator.id
+  try {
+    await http.delete(`/admin/creators/${creator.id}`, { params: { version: creator.version } })
+    creators.value = creators.value.filter((item) => item.id !== creator.id)
+    ElMessage.success('创作者账号已删除')
+  } catch (error) {
+    const code = error.response?.data?.code
+    if (code === 'CREATOR_VERSION_CONFLICT') await loadData()
+    ElMessage.error(code === 'CREATOR_VERSION_CONFLICT'
+      ? '账号已被其他人修改，请刷新后重试'
+      : (error.response?.data?.message || '创作者账号删除失败'))
+  } finally {
+    deletingId.value = null
+  }
+}
+
 function formatDate(value) {
   return value ? new Intl.DateTimeFormat('zh-CN').format(new Date(value)) : '-'
 }
@@ -144,6 +177,7 @@ function formatDate(value) {
           <div class="row-commands" data-label="操作">
             <button type="button" :aria-label="creator.accountStatus === 'ACTIVE' ? '停用账号' : '启用账号'" :title="creator.accountStatus === 'ACTIVE' ? '停用账号' : '启用账号'" @click="toggleStatus(creator)"><Power :size="16" /></button>
             <button type="button" aria-label="重置密码" title="重置密码" @click="resetPassword(creator)"><KeyRound :size="16" /></button>
+            <button class="danger-command" type="button" aria-label="删除账号" title="删除账号" :disabled="deletingId === creator.id" @click="deleteCreator(creator)"><Trash2 :size="16" /></button>
           </div>
         </article>
         <div v-if="!loading && filteredCreators.length === 0" class="empty-table">暂无匹配的创作者账号</div>

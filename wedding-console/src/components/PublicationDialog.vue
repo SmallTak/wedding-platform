@@ -11,6 +11,10 @@ const props = defineProps({
     type: String,
     default: '内容',
   },
+  actionLabel: {
+    type: String,
+    default: '发布',
+  },
   loading: {
     type: Boolean,
     default: false,
@@ -56,7 +60,7 @@ function submit() {
 <template>
   <el-dialog
     :model-value="modelValue"
-    :title="`发布${targetLabel}`"
+    :title="`${actionLabel}${targetLabel}`"
     width="520px"
     class="management-dialog publication-dialog"
     :close-on-click-modal="!loading"
@@ -86,7 +90,7 @@ function submit() {
     <template #footer>
       <el-button :disabled="loading" @click="close">取消</el-button>
       <el-button type="primary" native-type="submit" form="publication-form" :loading="loading">
-        确认发布
+        确认{{ actionLabel }}
       </el-button>
     </template>
   </el-dialog>

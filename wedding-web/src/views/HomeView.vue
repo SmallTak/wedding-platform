@@ -1,6 +1,6 @@
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
-import { ArrowUpRight, Menu, Search, X } from '@lucide/vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { ArrowUpRight, CalendarDays, Menu, Search, Send, Star, X } from '@lucide/vue'
 import heroImage from '../assets/wedding-hero.jpg'
 import { publicApi } from '../api/public'
 import BrandLogo from '../components/BrandLogo.vue'
@@ -12,10 +12,28 @@ const loading = ref(false)
 const loadError = ref('')
 const categories = ref([])
 const collections = ref([])
+const projects = ref([])
+const feedback = ref([])
 const keyword = ref('')
 const selectedCategoryId = ref(null)
+const inquirySubmitting = ref(false)
+const inquiryError = ref('')
+const inquiryReceipt = ref('')
+const inquiryForm = reactive({
+  name: '',
+  contact: '',
+  weddingDate: '',
+  region: '',
+  serviceNeeds: '',
+  remark: '',
+  website: '',
+})
 
-const heroBackground = computed(() => collections.value[0]?.coverPreviewUrl || heroImage)
+const heroBackground = computed(() => (
+  collections.value[0]?.coverPreviewUrl
+  || projects.value[0]?.coverPreviewUrl
+  || heroImage
+))
 const resultTitle = computed(() => {
   if (keyword.value.trim()) return `“${keyword.value.trim()}”的作品`
   const category = categories.value.find((item) => item.id === selectedCategoryId.value)
@@ -23,7 +41,7 @@ const resultTitle = computed(() => {
 })
 
 onMounted(async () => {
-  await Promise.all([loadStatus(), loadCategories(), loadCollections()])
+  await Promise.all([loadStatus(), loadCategories(), loadHomepage()])
 })
 
 async function loadStatus() {
@@ -44,6 +62,24 @@ async function loadCategories() {
   }
 }
 
+async function loadHomepage() {
+  loading.value = true
+  loadError.value = ''
+  try {
+    const { data } = await publicApi.home()
+    projects.value = data.projects
+    collections.value = data.collections
+    feedback.value = data.feedback
+  } catch {
+    projects.value = []
+    collections.value = []
+    feedback.value = []
+    loadError.value = '首页内容暂时无法加载，请稍后再试。'
+  } finally {
+    loading.value = false
+  }
+}
+
 async function loadCollections() {
   loading.value = true
   loadError.value = ''
@@ -55,6 +91,8 @@ async function loadCollections() {
       categoryId: selectedCategoryId.value || undefined,
     })
     collections.value = data.content
+    projects.value = []
+    feedback.value = []
   } catch {
     collections.value = []
     loadError.value = '作品暂时无法加载，请稍后再试。'
@@ -78,6 +116,58 @@ async function selectCategory(categoryId) {
   await nextTick()
   document.querySelector('#works')?.scrollIntoView({ behavior: 'smooth' })
 }
+
+async function clearFilters() {
+  keyword.value = ''
+  selectedCategoryId.value = null
+  await loadHomepage()
+}
+
+async function submitInquiry() {
+  if (!inquiryForm.name.trim() || !inquiryForm.contact.trim() || !inquiryForm.serviceNeeds.trim()) {
+    inquiryError.value = '请填写姓名、联系方式和服务需求。'
+    return
+  }
+  inquirySubmitting.value = true
+  inquiryError.value = ''
+  inquiryReceipt.value = ''
+  try {
+    const { data } = await publicApi.submitInquiry({
+      name: inquiryForm.name.trim(),
+      contact: inquiryForm.contact.trim(),
+      weddingDate: inquiryForm.weddingDate || null,
+      region: inquiryForm.region.trim() || null,
+      serviceNeeds: inquiryForm.serviceNeeds.trim(),
+      remark: inquiryForm.remark.trim() || null,
+      website: inquiryForm.website,
+    })
+    inquiryReceipt.value = data.referenceCode
+    Object.assign(inquiryForm, {
+      name: '',
+      contact: '',
+      weddingDate: '',
+      region: '',
+      serviceNeeds: '',
+      remark: '',
+      website: '',
+    })
+  } catch (error) {
+    inquiryError.value = error.response?.data?.code === 'INQUIRY_RATE_LIMITED'
+      ? '提交次数较多，请稍后再试。'
+      : '咨询提交失败，请稍后再试。'
+  } finally {
+    inquirySubmitting.value = false
+  }
+}
+
+function formatDate(value) {
+  if (!value) return ''
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  }).format(new Date(`${value}T00:00:00`))
+}
 </script>
 
 <template>
@@ -91,6 +181,7 @@ async function selectCategory(categoryId) {
         <RouterLink :to="{ name: 'project-list' }" @click="menuOpen = false">婚礼项目</RouterLink>
         <a href="#works" @click="menuOpen = false">婚礼作品</a>
         <a href="#categories" @click="menuOpen = false">作品分类</a>
+        <RouterLink :to="{ name: 'reviews' }" @click="menuOpen = false">客户评价</RouterLink>
         <a href="#contact" @click="menuOpen = false">预约咨询</a>
       </nav>
 
@@ -108,7 +199,7 @@ async function selectCategory(categoryId) {
         <button
           class="icon-button menu-button"
           type="button"
-          aria-label="打开导航"
+          :aria-label="menuOpen ? '关闭导航' : '打开导航'"
           :aria-expanded="menuOpen"
           @click="menuOpen = !menuOpen"
         >
@@ -139,6 +230,38 @@ async function selectCategory(categoryId) {
         </div>
       </section>
 
+      <section v-if="projects.length" class="content-section homepage-projects">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Featured weddings</p>
+            <h2>推荐婚礼项目</h2>
+          </div>
+          <RouterLink class="text-link" :to="{ name: 'project-list' }">
+            查看全部
+            <ArrowUpRight :size="17" />
+          </RouterLink>
+        </div>
+        <div class="homepage-project-grid">
+          <RouterLink
+            v-for="project in projects"
+            :key="project.id"
+            :to="{ name: 'project-detail', params: { projectId: project.id } }"
+            class="homepage-project-item"
+          >
+            <img
+              :src="project.coverThumbnailUrl || project.coverPreviewUrl || heroImage"
+              :alt="project.title"
+              loading="lazy"
+            />
+            <div>
+              <span><CalendarDays :size="14" />{{ formatDate(project.eventDate) }}</span>
+              <h3>{{ project.title }}</h3>
+              <p>{{ project.locationText }}</p>
+            </div>
+          </RouterLink>
+        </div>
+      </section>
+
       <section id="works" class="content-section featured-section">
         <div class="section-heading">
           <div>
@@ -149,7 +272,7 @@ async function selectCategory(categoryId) {
             v-if="selectedCategoryId || keyword"
             class="text-button"
             type="button"
-            @click="keyword = ''; selectedCategoryId = null; loadCollections()"
+            @click="clearFilters"
           >查看全部</button>
         </div>
 
@@ -199,15 +322,81 @@ async function selectCategory(categoryId) {
         </div>
       </section>
 
+      <section v-if="feedback.length" class="homepage-feedback-section">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Client voices</p>
+            <h2>他们记住的时刻</h2>
+          </div>
+          <RouterLink class="text-link" :to="{ name: 'reviews' }">
+            查看全部评价
+            <ArrowUpRight :size="17" />
+          </RouterLink>
+        </div>
+        <div class="public-feedback-list">
+          <blockquote v-for="item in feedback" :key="item.id" class="public-feedback-item">
+            <div class="public-feedback-rating" :aria-label="`${item.rating} 星`">
+              <Star v-for="index in 5" :key="index" :size="15" :class="{ filled: index <= item.rating }" />
+            </div>
+            <p>“{{ item.content }}”</p>
+            <footer>
+              <strong>{{ item.customerDisplayName }}</strong>
+              <span>{{ item.projectTitle }} · {{ item.creatorDisplayName }}</span>
+            </footer>
+            <div v-if="item.reply" class="public-feedback-reply">
+              <span>创作者回复</span>
+              <p>{{ item.reply.content }}</p>
+            </div>
+          </blockquote>
+        </div>
+      </section>
+
       <section id="contact" class="contact-section">
         <div>
           <p class="section-kicker">Enquiry</p>
           <h2>告诉我们你的婚期</h2>
+          <p class="contact-copy">留下联系方式与服务需求，团队会根据婚期和地区尽快回复。</p>
         </div>
-        <a class="contact-link" href="mailto:hello@example.com">
-          预约咨询
-          <ArrowUpRight :size="18" />
-        </a>
+        <form class="inquiry-form" @submit.prevent="submitInquiry">
+          <div class="inquiry-form-grid">
+            <label>
+              姓名
+              <input v-model="inquiryForm.name" maxlength="100" autocomplete="name" required />
+            </label>
+            <label>
+              联系方式
+              <input v-model="inquiryForm.contact" minlength="5" maxlength="120" autocomplete="tel" placeholder="手机或微信" required />
+            </label>
+            <label>
+              婚期
+              <input v-model="inquiryForm.weddingDate" type="date" />
+            </label>
+            <label>
+              地区
+              <input v-model="inquiryForm.region" maxlength="200" placeholder="城市或场地" />
+            </label>
+            <label class="inquiry-wide-field">
+              服务需求
+              <input v-model="inquiryForm.serviceNeeds" maxlength="1000" placeholder="婚礼摄影、跟拍、妆造或策划" required />
+            </label>
+            <label class="inquiry-wide-field">
+              补充说明
+              <textarea v-model="inquiryForm.remark" rows="4" maxlength="2000"></textarea>
+            </label>
+            <label class="inquiry-honeypot" aria-hidden="true">
+              网站
+              <input v-model="inquiryForm.website" tabindex="-1" autocomplete="off" />
+            </label>
+          </div>
+          <p v-if="inquiryError" class="inquiry-message error">{{ inquiryError }}</p>
+          <p v-else-if="inquiryReceipt" class="inquiry-message success">
+            已收到咨询，编号 {{ inquiryReceipt }}
+          </p>
+          <button type="submit" :disabled="inquirySubmitting">
+            <Send :size="17" />
+            {{ inquirySubmitting ? '正在提交' : '提交咨询' }}
+          </button>
+        </form>
       </section>
     </main>
 

@@ -28,6 +28,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.hamcrest.Matchers.hasSize;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -110,7 +111,8 @@ class CollectionFlowTests {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CATEGORY_NAME_EXISTS"));
 
-        mockMvc.perform(put("/api/admin/content/categories/{categoryId}", categoryId.longValue())
+        String updatedCategoryJson = mockMvc.perform(put(
+                                "/api/admin/content/categories/{categoryId}", categoryId.longValue())
                         .header("Authorization", bearer(adminToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -123,7 +125,9 @@ class CollectionFlowTests {
                                 }
                                 """.formatted(categoryVersion.longValue(), uniqueName)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("DISABLED"));
+                .andExpect(jsonPath("$.status").value("DISABLED"))
+                .andReturn().getResponse().getContentAsString();
+        Number updatedCategoryVersion = JsonPath.read(updatedCategoryJson, "$.version");
 
         String tagJson = mockMvc.perform(post("/api/admin/content/tags")
                         .header("Authorization", bearer(adminToken))
@@ -140,7 +144,8 @@ class CollectionFlowTests {
         Number tagId = JsonPath.read(tagJson, "$.id");
         Number tagVersion = JsonPath.read(tagJson, "$.version");
 
-        mockMvc.perform(put("/api/admin/content/tags/{tagId}", tagId.longValue())
+        String updatedTagJson = mockMvc.perform(put(
+                                "/api/admin/content/tags/{tagId}", tagId.longValue())
                         .header("Authorization", bearer(adminToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -152,12 +157,32 @@ class CollectionFlowTests {
                                 }
                                 """.formatted(tagVersion.longValue(), tagId.longValue())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("DISABLED"));
+                .andExpect(jsonPath("$.status").value("DISABLED"))
+                .andReturn().getResponse().getContentAsString();
+        Number updatedTagVersion = JsonPath.read(updatedTagJson, "$.version");
 
         mockMvc.perform(get("/api/admin/content/categories")
                         .header("Authorization", bearer(ownerToken)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+        mockMvc.perform(delete("/api/admin/content/categories/{categoryId}", categoryId.longValue())
+                        .header("Authorization", bearer(adminToken))
+                        .param("version", updatedCategoryVersion.toString()))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(delete("/api/admin/content/tags/{tagId}", tagId.longValue())
+                        .header("Authorization", bearer(adminToken))
+                        .param("version", updatedTagVersion.toString()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/admin/content/categories")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == %d)]".formatted(categoryId.longValue()), hasSize(0)));
+        mockMvc.perform(get("/api/admin/content/tags")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == %d)]".formatted(tagId.longValue()), hasSize(0)));
     }
 
     @Test
@@ -192,6 +217,17 @@ class CollectionFlowTests {
                 .andReturn().getResponse().getContentAsString();
         Number collectionId = JsonPath.read(createdJson, "$.id");
         Number createdVersion = JsonPath.read(createdJson, "$.version");
+
+        mockMvc.perform(delete("/api/admin/content/categories/{categoryId}", category.getId())
+                        .header("Authorization", bearer(adminToken))
+                        .param("version", category.getVersion().toString()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CATEGORY_IN_USE"));
+        mockMvc.perform(delete("/api/admin/content/tags/{tagId}", primaryTag.getId())
+                        .header("Authorization", bearer(adminToken))
+                        .param("version", primaryTag.getVersion().toString()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("TAG_IN_USE"));
 
         mockMvc.perform(get("/api/collections/{collectionId}", collectionId.longValue())
                         .header("Authorization", bearer(outsiderToken)))

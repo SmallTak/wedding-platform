@@ -252,8 +252,9 @@ public class ProjectReviewService {
         requireAdmin(actor);
         WeddingProject project = getProject(projectId);
         requireVersion(project, request.version());
-        if (ReviewStatus.APPROVED != project.getReviewStatus()
-                || PublishStatus.READY != project.getPublishStatus()) {
+        boolean publishableStatus = PublishStatus.READY == project.getPublishStatus()
+                || PublishStatus.OFFLINE == project.getPublishStatus();
+        if (ReviewStatus.APPROVED != project.getReviewStatus() || !publishableStatus) {
             throw new ApiException(HttpStatus.CONFLICT, "PROJECT_NOT_READY",
                     "The project must be fully approved before publishing");
         }

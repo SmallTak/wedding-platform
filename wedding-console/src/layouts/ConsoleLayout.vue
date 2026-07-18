@@ -7,7 +7,9 @@ import {
   CircleUserRound,
   FolderHeart,
   Images,
+  Inbox,
   LayoutDashboard,
+  LayoutTemplate,
   LogOut,
   Menu,
   MessageSquareText,
@@ -39,7 +41,9 @@ const navItems = [
   { label: '审核中心', to: '/reviews', icon: ShieldCheck, permission: '/review/collections', route: 'reviews' },
   { label: '创作者', to: '/creators', icon: UsersRound, permission: '/accounts/creators', route: 'creators' },
   { label: '分类标签', to: '/content-config', icon: Tags, permission: '/config/content', route: 'content-config' },
-  { label: '客户反馈', to: '/', icon: MessageSquareText, permission: '/accounts/customers' },
+  { label: '客户评价', to: '/feedback', icon: MessageSquareText, permission: '/operations/feedback', route: 'feedback' },
+  { label: '咨询线索', to: '/inquiries', icon: Inbox, permission: '/operations/inquiries', route: 'inquiries' },
+  { label: '首页运营', to: '/site-home', icon: LayoutTemplate, permission: '/site/home', route: 'site-home' },
   { label: '数据统计', to: '/', icon: BarChart3, permission: '/analytics' },
 ]
 

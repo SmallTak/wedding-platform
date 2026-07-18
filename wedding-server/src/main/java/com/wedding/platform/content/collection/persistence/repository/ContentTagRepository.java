@@ -17,4 +17,8 @@ public interface ContentTagRepository extends JpaRepository<ContentTag, Long> {
     boolean existsByNameIgnoreCaseAndDeletedFalse(String name);
 
     boolean existsByNameIgnoreCaseAndDeletedFalseAndIdNot(String name, Long id);
+
+    boolean existsByNameIgnoreCase(String name);
+
+    boolean existsByNameIgnoreCaseAndIdNot(String name, Long id);
 }

@@ -2,8 +2,10 @@ package com.wedding.platform.content.collection.application;
 
 import com.wedding.platform.content.collection.persistence.entity.ContentCategory;
 import com.wedding.platform.content.collection.persistence.entity.ContentTag;
+import com.wedding.platform.content.collection.persistence.repository.CollectionTagRepository;
 import com.wedding.platform.content.collection.persistence.repository.ContentCategoryRepository;
 import com.wedding.platform.content.collection.persistence.repository.ContentTagRepository;
+import com.wedding.platform.content.collection.persistence.repository.WorkCollectionRepository;
 import com.wedding.platform.content.collection.web.ContentConfigDtos;
 import com.wedding.platform.platform.audit.AuditLogService;
 import com.wedding.platform.platform.web.ApiException;
@@ -14,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.Instant;
 import java.util.List;
 
 @Service
@@ -21,17 +24,23 @@ public class ContentConfigService {
 
     private final ContentCategoryRepository categoryRepository;
     private final ContentTagRepository tagRepository;
+    private final WorkCollectionRepository collectionRepository;
+    private final CollectionTagRepository collectionTagRepository;
     private final SystemUserRepository userRepository;
     private final AuditLogService auditLogService;
 
     public ContentConfigService(
             ContentCategoryRepository categoryRepository,
             ContentTagRepository tagRepository,
+            WorkCollectionRepository collectionRepository,
+            CollectionTagRepository collectionTagRepository,
             SystemUserRepository userRepository,
             AuditLogService auditLogService
     ) {
         this.categoryRepository = categoryRepository;
         this.tagRepository = tagRepository;
+        this.collectionRepository = collectionRepository;
+        this.collectionTagRepository = collectionTagRepository;
         this.userRepository = userRepository;
         this.auditLogService = auditLogService;
     }
@@ -95,6 +104,32 @@ public class ContentConfigService {
         return toResponse(category);
     }
 
+    @Transactional
+    public void deleteCategory(
+            Long operatorId,
+            Long categoryId,
+            Long version,
+            String ipAddress
+    ) {
+        SystemUser actor = requireAdmin(operatorId);
+        ContentCategory category = categoryRepository.findByIdAndDeletedFalse(categoryId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CATEGORY_NOT_FOUND",
+                        "Content category was not found"));
+        requireVersion(category.getVersion(), version, "CATEGORY_VERSION_CONFLICT");
+        if (collectionRepository.existsByCategoryIdAndDeletedFalse(categoryId)) {
+            throw new ApiException(HttpStatus.CONFLICT, "CATEGORY_IN_USE",
+                    "The category is still used by an active work collection");
+        }
+
+        category.setStatus("DISABLED");
+        category.setDeleted(true);
+        category.setDeletedAt(Instant.now());
+        category.setUpdatedBy(operatorId);
+        categoryRepository.saveAndFlush(category);
+        auditLogService.record(operatorId, actor.getAccountType(), "CONTENT_CONFIG", "DELETE_CATEGORY",
+                "CONTENT_CATEGORY", categoryId, "Content category logically deleted", ipAddress);
+    }
+
     @Transactional(readOnly = true)
     public List<ContentConfigDtos.TagResponse> listTags(Long operatorId) {
         requireAdmin(operatorId);
@@ -152,6 +187,32 @@ public class ContentConfigService {
         return toResponse(tag);
     }
 
+    @Transactional
+    public void deleteTag(
+            Long operatorId,
+            Long tagId,
+            Long version,
+            String ipAddress
+    ) {
+        SystemUser actor = requireAdmin(operatorId);
+        ContentTag tag = tagRepository.findByIdAndDeletedFalse(tagId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TAG_NOT_FOUND",
+                        "Content tag was not found"));
+        requireVersion(tag.getVersion(), version, "TAG_VERSION_CONFLICT");
+        if (collectionTagRepository.countActiveCollectionReferences(tagId) > 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "TAG_IN_USE",
+                    "The tag is still used by an active work collection");
+        }
+
+        tag.setStatus("DISABLED");
+        tag.setDeleted(true);
+        tag.setDeletedAt(Instant.now());
+        tag.setUpdatedBy(operatorId);
+        tagRepository.saveAndFlush(tag);
+        auditLogService.record(operatorId, actor.getAccountType(), "CONTENT_CONFIG", "DELETE_TAG",
+                "CONTENT_TAG", tagId, "Content tag logically deleted", ipAddress);
+    }
+
     private SystemUser requireAdmin(Long userId) {
         SystemUser actor = userRepository.findById(userId)
                 .filter(user -> !Boolean.TRUE.equals(user.getDeleted()))
@@ -167,8 +228,8 @@ public class ContentConfigService {
 
     private void requireCategoryNameAvailable(String name, Long excludedId) {
         boolean exists = excludedId == null
-                ? categoryRepository.existsByNameIgnoreCaseAndDeletedFalse(name)
-                : categoryRepository.existsByNameIgnoreCaseAndDeletedFalseAndIdNot(name, excludedId);
+                ? categoryRepository.existsByNameIgnoreCase(name)
+                : categoryRepository.existsByNameIgnoreCaseAndIdNot(name, excludedId);
         if (exists) {
             throw new ApiException(HttpStatus.CONFLICT, "CATEGORY_NAME_EXISTS",
                     "A content category with this name already exists");
@@ -177,8 +238,8 @@ public class ContentConfigService {
 
     private void requireTagNameAvailable(String name, Long excludedId) {
         boolean exists = excludedId == null
-                ? tagRepository.existsByNameIgnoreCaseAndDeletedFalse(name)
-                : tagRepository.existsByNameIgnoreCaseAndDeletedFalseAndIdNot(name, excludedId);
+                ? tagRepository.existsByNameIgnoreCase(name)
+                : tagRepository.existsByNameIgnoreCaseAndIdNot(name, excludedId);
         if (exists) {
             throw new ApiException(HttpStatus.CONFLICT, "TAG_NAME_EXISTS",
                     "A content tag with this name already exists");

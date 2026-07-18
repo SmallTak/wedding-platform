@@ -9,6 +9,9 @@ export const publicApi = {
   status() {
     return http.get('/status')
   },
+  home() {
+    return http.get('/home')
+  },
   categories() {
     return http.get('/content/categories')
   },
@@ -29,5 +32,11 @@ export const publicApi = {
   },
   projectAccess(projectId, password) {
     return http.post(`/projects/${projectId}/access`, { password })
+  },
+  feedback(params = {}) {
+    return http.get('/feedback', { params })
+  },
+  submitInquiry(payload) {
+    return http.post('/inquiries', payload)
   },
 }

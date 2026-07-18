@@ -401,8 +401,9 @@ public class CollectionReviewService {
         requireAdmin(actor);
         WorkCollection collection = getCollection(collectionId);
         requireVersion(collection, request.version());
-        if (ReviewStatus.APPROVED != collection.getReviewStatus()
-                || PublishStatus.READY != collection.getPublishStatus()) {
+        boolean publishableStatus = PublishStatus.READY == collection.getPublishStatus()
+                || PublishStatus.OFFLINE == collection.getPublishStatus();
+        if (ReviewStatus.APPROVED != collection.getReviewStatus() || !publishableStatus) {
             throw new ApiException(HttpStatus.CONFLICT, "COLLECTION_NOT_READY",
                     "The collection must be fully approved before publishing");
         }
