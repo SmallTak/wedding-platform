@@ -4,13 +4,14 @@ const errorMessages = {
   CATEGORY_VERSION_CONFLICT: '分类已被其他人修改，请刷新后重试',
   TAG_VERSION_CONFLICT: '标签已被其他人修改，请刷新后重试',
   PROJECT_VERSION_CONFLICT: '项目已被其他人修改，请重新打开后编辑',
-  PROJECT_PUBLISHED_LOCKED: '已发布项目不能修改公共资料',
+  PROJECT_PUBLISHED_LOCKED: '已发布项目需先下架后再修改或删除',
   PROJECT_ALREADY_PENDING: '当前项目已经提交审核',
   PROJECT_NOT_PENDING: '当前项目不在待审核状态',
   PROJECT_FIELDS_NOT_APPROVED: '项目仍有字段未通过审核',
+  PROJECT_COLLECTIONS_EXIST: '请先删除该项目下的作品集，再删除婚礼项目',
   PROJECT_CREATOR_INVALID: '选择的创作者不存在、已停用或账号无效',
   COLLECTION_VERSION_CONFLICT: '作品集已被其他人修改，页面将重新加载',
-  COLLECTION_PUBLISHED_LOCKED: '已发布作品集不能修改内容或图片',
+  COLLECTION_PUBLISHED_LOCKED: '已发布作品集需先下架后再修改或删除',
   COLLECTION_CATEGORY_INVALID: '请选择当前启用的分类',
   COLLECTION_TAG_INVALID: '选择的标签包含已停用或无效项',
   COLLECTION_PROJECT_INVALID: '关联项目不存在或当前账号不可访问',
@@ -37,7 +38,7 @@ const errorMessages = {
   REVIEW_ITEM_SELECTION_INVALID: '请选择当前版本中的待审核字段',
   NO_PENDING_FIELDS: '当前没有待审核字段',
   NO_REVIEW_CHANGES: '请先修改被驳回内容或新增待审内容',
-  PASSWORD_VISIBILITY_NOT_SUPPORTED: '密码访问尚未开放，请选择公开或隐藏',
+  ACCESS_PASSWORD_INVALID: '访问密码需为 6 至 64 个字符，且不能超过 72 字节',
   VERSION_CONFLICT: '数据已被其他人修改，请刷新后重试',
   VALIDATION_ERROR: '提交内容不完整或格式不正确',
 }
@@ -83,6 +84,7 @@ export function formatFileSize(bytes) {
 export const visibilityLabels = {
   HIDDEN: '隐藏',
   PUBLIC: '公开',
+  PASSWORD: '密码访问',
 }
 
 export const reviewStatusLabels = {

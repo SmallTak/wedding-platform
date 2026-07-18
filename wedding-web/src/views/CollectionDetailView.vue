@@ -3,10 +3,14 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft, X } from '@lucide/vue'
 import { publicApi } from '../api/public'
+import ContentAccessGate from '../components/ContentAccessGate.vue'
 
 const route = useRoute()
 const loading = ref(false)
 const errorMessage = ref('')
+const accessRequired = ref(false)
+const accessLoading = ref(false)
+const accessError = ref('')
 const detail = ref(null)
 const activePhotoIndex = ref(null)
 
@@ -30,15 +34,35 @@ onUnmounted(() => {
 async function loadCollection() {
   loading.value = true
   errorMessage.value = ''
+  accessRequired.value = false
   try {
     const { data } = await publicApi.collection(route.params.collectionId)
     detail.value = data
   } catch (error) {
-    errorMessage.value = error.response?.status === 404
-      ? '该作品集尚未公开或已经下架。'
-      : '作品集暂时无法加载，请稍后再试。'
+    if (error.response?.status === 401 && error.response?.data?.code === 'CONTENT_ACCESS_REQUIRED') {
+      accessRequired.value = true
+    } else {
+      errorMessage.value = error.response?.status === 404
+        ? '该作品集尚未公开或已经下架。'
+        : '作品集暂时无法加载，请稍后再试。'
+    }
   } finally {
     loading.value = false
+  }
+}
+
+async function unlockCollection(password) {
+  accessLoading.value = true
+  accessError.value = ''
+  try {
+    await publicApi.collectionAccess(route.params.collectionId, password)
+    await loadCollection()
+  } catch (error) {
+    accessError.value = error.response?.data?.code === 'CONTENT_ACCESS_RATE_LIMITED'
+      ? '尝试次数过多，请稍后再试。'
+      : '访问密码不正确。'
+  } finally {
+    accessLoading.value = false
   }
 }
 
@@ -67,6 +91,13 @@ function closePreview() {
     </header>
 
     <main v-if="loading" class="detail-state">正在加载作品...</main>
+    <main v-else-if="accessRequired" class="detail-state access-state">
+      <ContentAccessGate
+        :loading="accessLoading"
+        :error-message="accessError"
+        @submit="unlockCollection"
+      />
+    </main>
     <main v-else-if="errorMessage" class="detail-state">
       <h1>无法查看作品</h1>
       <p>{{ errorMessage }}</p>
@@ -92,7 +123,11 @@ function closePreview() {
         <dl>
           <div v-if="collection.project">
             <dt>项目</dt>
-            <dd>{{ collection.project.title }} · {{ collection.project.locationText }}</dd>
+            <dd>
+              <RouterLink :to="{ name: 'project-detail', params: { projectId: collection.project.id } }">
+                {{ collection.project.title }} · {{ collection.project.locationText }}
+              </RouterLink>
+            </dd>
           </div>
           <div v-if="creatorLabel">
             <dt>创作者</dt>

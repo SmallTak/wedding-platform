@@ -19,6 +19,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -208,6 +209,54 @@ class ProjectFlowTests {
                 .andExpect(jsonPath("$.creators.length()").value(2))
                 .andExpect(jsonPath("$.creators[0].userId").value(owner.getId()))
                 .andExpect(jsonPath("$.creators[0].accountStatus").value("DISABLED"));
+    }
+
+    @Test
+    void projectParticipantCanLogicallyDeleteAnUnpublishedProject() throws Exception {
+        String ownerToken = login(OWNER_MOBILE);
+        String outsiderToken = login(OUTSIDER_MOBILE);
+        String createdJson = mockMvc.perform(post("/api/projects")
+                        .header("Authorization", bearer(ownerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Project Pending Deletion",
+                                  "eventDate": "2026-12-01",
+                                  "regionCode": "330100",
+                                  "locationText": "Hangzhou"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Number projectId = JsonPath.read(createdJson, "$.id");
+        Number version = JsonPath.read(createdJson, "$.version");
+
+        mockMvc.perform(delete("/api/projects/{projectId}", projectId.longValue())
+                        .header("Authorization", bearer(outsiderToken))
+                        .param("version", version.toString()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PROJECT_ACCESS_DENIED"));
+
+        mockMvc.perform(delete("/api/projects/{projectId}", projectId.longValue())
+                        .header("Authorization", bearer(ownerToken))
+                        .param("version", String.valueOf(version.longValue() + 1)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("PROJECT_VERSION_CONFLICT"));
+
+        mockMvc.perform(delete("/api/projects/{projectId}", projectId.longValue())
+                        .header("Authorization", bearer(ownerToken))
+                        .param("version", version.toString()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/projects/{projectId}", projectId.longValue())
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(get("/api/projects")
+                        .header("Authorization", bearer(ownerToken))
+                        .param("keyword", "Project Pending Deletion"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0));
     }
 
     private SystemUser ensureAccount(String mobile, String accountType, String displayName) {

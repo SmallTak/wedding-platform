@@ -122,6 +122,6 @@ curl -I https://photo.shop-hz.top/
 curl https://photo.shop-hz.top/api/public/status
 ```
 
-截至 2026-07-17，生产服务、HTTPS、主域名解析、登录接口和审核中心均已验证，生产数据库
-已迁移至 Flyway `V7`。首个生产管理员已经创建，`BOOTSTRAP_ADMIN_ENABLED` 保持为 `false`，
-环境文件中不保留临时密码。
+截至 2026-07-18，生产服务、HTTPS、主域名解析、登录接口、审核中心、密码访问、公开婚礼项目
+及逻辑删除均已部署，生产数据库保持 Flyway `V7`。首个生产管理员已经创建，
+`BOOTSTRAP_ADMIN_ENABLED` 保持为 `false`，环境文件中不保留临时密码。

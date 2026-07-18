@@ -6,6 +6,7 @@ import com.wedding.platform.content.project.persistence.entity.WeddingProject;
 import com.wedding.platform.content.project.persistence.repository.ProjectCreatorRepository;
 import com.wedding.platform.content.project.persistence.repository.WeddingProjectRepository;
 import com.wedding.platform.content.project.web.ProjectDtos;
+import com.wedding.platform.content.collection.persistence.repository.WorkCollectionRepository;
 import com.wedding.platform.content.review.application.ReviewRevisionService;
 import com.wedding.platform.content.review.persistence.entity.ReviewTargetType;
 import com.wedding.platform.content.shared.ContentVisibility;
@@ -48,6 +49,7 @@ public class ProjectService {
     private final SystemUserRepository userRepository;
     private final AuditLogService auditLogService;
     private final ReviewRevisionService reviewRevisionService;
+    private final WorkCollectionRepository collectionRepository;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public ProjectService(
@@ -55,13 +57,15 @@ public class ProjectService {
             ProjectCreatorRepository projectCreatorRepository,
             SystemUserRepository userRepository,
             AuditLogService auditLogService,
-            ReviewRevisionService reviewRevisionService
+            ReviewRevisionService reviewRevisionService,
+            WorkCollectionRepository collectionRepository
     ) {
         this.projectRepository = projectRepository;
         this.projectCreatorRepository = projectCreatorRepository;
         this.userRepository = userRepository;
         this.auditLogService = auditLogService;
         this.reviewRevisionService = reviewRevisionService;
+        this.collectionRepository = collectionRepository;
     }
 
     @Transactional
@@ -156,6 +160,35 @@ public class ProjectService {
         auditLogService.record(operatorId, actor.getAccountType(), "PROJECT", "UPDATE_PROJECT",
                 "WEDDING_PROJECT", projectId, "Wedding project updated", ipAddress);
         return toResponse(project);
+    }
+
+    @Transactional
+    public void deleteProject(
+            Long operatorId,
+            Long projectId,
+            Long version,
+            String ipAddress
+    ) {
+        SystemUser actor = getActor(operatorId);
+        requireProjectAccount(actor);
+        WeddingProject project = getProject(projectId);
+        requireProjectAccess(actor, project);
+        requireEditable(project);
+        requireVersion(project, version);
+        if (collectionRepository.existsByProjectIdAndDeletedFalse(projectId)) {
+            throw new ApiException(HttpStatus.CONFLICT, "PROJECT_COLLECTIONS_EXIST",
+                    "Delete the project's work collections before deleting the project");
+        }
+
+        reviewRevisionService.cancelPendingSubmission(ReviewTargetType.PROJECT, projectId, operatorId);
+        Instant now = Instant.now();
+        project.setDeleted(true);
+        project.setDeletedAt(now);
+        project.setUpdatedBy(operatorId);
+        project.setUpdatedAt(now);
+        projectRepository.saveAndFlush(project);
+        auditLogService.record(operatorId, actor.getAccountType(), "PROJECT", "DELETE_PROJECT",
+                "WEDDING_PROJECT", projectId, "Wedding project logically deleted", ipAddress);
     }
 
     @Transactional

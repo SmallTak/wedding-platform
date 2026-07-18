@@ -13,6 +13,9 @@ export const projectApi = {
   update(projectId, payload) {
     return http.put(`/projects/${projectId}`, payload)
   },
+  delete(projectId, version) {
+    return http.delete(`/projects/${projectId}`, { params: { version } })
+  },
   assignCreators(projectId, payload) {
     return http.put(`/admin/projects/${projectId}/creators`, payload)
   },
@@ -60,6 +63,9 @@ export const collectionApi = {
   },
   update(collectionId, payload) {
     return http.put(`/collections/${collectionId}`, payload)
+  },
+  delete(collectionId, version) {
+    return http.delete(`/collections/${collectionId}`, { params: { version } })
   },
   assignCreators(collectionId, payload) {
     return http.put(`/admin/collections/${collectionId}/creators`, payload)

@@ -17,6 +17,7 @@ import com.wedding.platform.content.media.persistence.repository.MediaAssetRepos
 import com.wedding.platform.content.project.persistence.entity.WeddingProject;
 import com.wedding.platform.content.project.persistence.repository.WeddingProjectRepository;
 import com.wedding.platform.content.publication.web.PublicCollectionDtos;
+import com.wedding.platform.content.publication.web.PublicAccessDtos;
 import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
 import com.wedding.platform.content.shared.ReviewStatus;
@@ -52,6 +53,7 @@ public class PublicCollectionService {
     private final MediaAssetRepository assetRepository;
     private final WeddingProjectRepository projectRepository;
     private final SystemUserRepository userRepository;
+    private final PublicContentAccessService contentAccessService;
 
     public PublicCollectionService(
             WorkCollectionRepository collectionRepository,
@@ -62,7 +64,8 @@ public class PublicCollectionService {
             CollectionPhotoRepository photoRepository,
             MediaAssetRepository assetRepository,
             WeddingProjectRepository projectRepository,
-            SystemUserRepository userRepository
+            SystemUserRepository userRepository,
+            PublicContentAccessService contentAccessService
     ) {
         this.collectionRepository = collectionRepository;
         this.categoryRepository = categoryRepository;
@@ -73,6 +76,7 @@ public class PublicCollectionService {
         this.assetRepository = assetRepository;
         this.projectRepository = projectRepository;
         this.userRepository = userRepository;
+        this.contentAccessService = contentAccessService;
     }
 
     @Transactional(readOnly = true)
@@ -110,14 +114,12 @@ public class PublicCollectionService {
     }
 
     @Transactional(readOnly = true)
-    public PublicCollectionDtos.CollectionDetail collection(Long collectionId) {
+    public PublicCollectionDtos.CollectionDetail collection(Long collectionId, String accessToken) {
         WorkCollection collection = collectionRepository
-                .findByIdAndDeletedFalseAndPublishStatusAndVisibility(
-                        collectionId,
-                        PublishStatus.PUBLISHED,
-                        ContentVisibility.PUBLIC)
+                .findByIdAndDeletedFalseAndPublishStatus(collectionId, PublishStatus.PUBLISHED)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PUBLIC_COLLECTION_NOT_FOUND",
                         "Published collection was not found"));
+        requireAccess(collection, accessToken);
         List<CollectionPhoto> photos = photoRepository
                 .findAllByCollectionIdAndDeletedFalseAndReviewStatusOrderBySortOrderAscIdAsc(
                         collectionId,
@@ -145,6 +147,50 @@ public class PublicCollectionService {
                 .filter(photo -> photo != null)
                 .toList();
         return new PublicCollectionDtos.CollectionDetail(toSummary(collection), publicPhotos);
+    }
+
+    @Transactional
+    public PublicContentAccessService.IssuedSession unlock(
+            Long collectionId,
+            PublicAccessDtos.AccessRequest request,
+            String clientAddress
+    ) {
+        WorkCollection collection = collectionRepository
+                .findByIdAndDeletedFalseAndPublishStatus(collectionId, PublishStatus.PUBLISHED)
+                .filter(item -> ContentVisibility.PASSWORD == item.getVisibility())
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "CONTENT_ACCESS_INVALID",
+                        "The access password is incorrect"));
+        return contentAccessService.unlock(
+                PublicContentAccessService.ContentType.COLLECTION,
+                collectionId,
+                collection.getVersion(),
+                collection.getAccessPasswordHash(),
+                request.password(),
+                clientAddress
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<PublicCollectionDtos.CollectionSummary> projectCollections(Long projectId) {
+        return collectionRepository.findPublishedCollectionsByProject(
+                        projectId,
+                        PublishStatus.PUBLISHED,
+                        ContentVisibility.PUBLIC)
+                .stream()
+                .map(this::toSummary)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public PublicCollectionDtos.CollectionSummary firstProjectCollection(Long projectId) {
+        return collectionRepository.findPublishedCollectionsByProject(
+                        projectId,
+                        PublishStatus.PUBLISHED,
+                        ContentVisibility.PUBLIC)
+                .stream()
+                .findFirst()
+                .map(this::toSummary)
+                .orElse(null);
     }
 
     private PublicCollectionDtos.CollectionSummary toSummary(WorkCollection collection) {
@@ -245,5 +291,24 @@ public class PublicCollectionService {
 
     private String publicUrl(String relativePath) {
         return "/media/" + relativePath.replace('\\', '/');
+    }
+
+    private void requireAccess(WorkCollection collection, String accessToken) {
+        if (ContentVisibility.PUBLIC == collection.getVisibility()) {
+            return;
+        }
+        if (ContentVisibility.PASSWORD == collection.getVisibility()) {
+            if (contentAccessService.isValid(
+                    accessToken,
+                    PublicContentAccessService.ContentType.COLLECTION,
+                    collection.getId(),
+                    collection.getVersion())) {
+                return;
+            }
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "CONTENT_ACCESS_REQUIRED",
+                    "An access password is required");
+        }
+        throw new ApiException(HttpStatus.NOT_FOUND, "PUBLIC_COLLECTION_NOT_FOUND",
+                "Published collection was not found");
     }
 }

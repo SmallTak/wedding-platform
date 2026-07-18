@@ -37,6 +37,9 @@ app:
       issuer: wedding-platform
       secret: ${JWT_SECRET:wedding-platform-local-jwt-secret-change-before-production}
       ttl: ${JWT_TTL:PT8H}
+    content-access:
+      issuer: wedding-platform-public-content
+      ttl: ${CONTENT_ACCESS_TTL:PT30M}
   storage:
     root: ${STORAGE_ROOT:./data/storage}
     avatars: avatars

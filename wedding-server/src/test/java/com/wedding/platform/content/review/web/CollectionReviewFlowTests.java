@@ -5,6 +5,8 @@ import com.wedding.platform.content.collection.persistence.entity.ContentCategor
 import com.wedding.platform.content.collection.persistence.entity.ContentTag;
 import com.wedding.platform.content.collection.persistence.repository.ContentCategoryRepository;
 import com.wedding.platform.content.collection.persistence.repository.ContentTagRepository;
+import com.wedding.platform.content.collection.persistence.repository.WorkCollectionRepository;
+import jakarta.servlet.http.Cookie;
 import com.wedding.platform.system.account.persistence.entity.SystemRole;
 import com.wedding.platform.system.account.persistence.entity.SystemUser;
 import com.wedding.platform.system.account.persistence.repository.SystemRoleRepository;
@@ -15,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
@@ -36,7 +39,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 
 @SpringBootTest
@@ -48,6 +53,7 @@ class CollectionReviewFlowTests {
     private static final String ADMIN_MOBILE = "13800000401";
     private static final String OWNER_MOBILE = "13900000401";
     private static final String OUTSIDER_MOBILE = "13900000402";
+    private static final String ACCESS_PASSWORD = "Guest@Test123";
 
     @Autowired
     private MockMvc mockMvc;
@@ -63,6 +69,9 @@ class CollectionReviewFlowTests {
 
     @Autowired
     private ContentTagRepository tagRepository;
+
+    @Autowired
+    private WorkCollectionRepository collectionRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -262,33 +271,68 @@ class CollectionReviewFlowTests {
                         .content("""
                                 {
                                   "version": %d,
-                                  "visibility": "PUBLIC",
+                                  "visibility": "PASSWORD",
+                                  "accessPassword": "%s",
                                   "featured": true,
                                   "pinned": false,
                                   "sortOrder": 10
                                 }
-                                """.formatted(readyVersion.longValue())))
+                                """.formatted(readyVersion.longValue(), ACCESS_PASSWORD)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.collection.publishStatus").value("PUBLISHED"))
-                .andExpect(jsonPath("$.collection.visibility").value("PUBLIC"))
+                .andExpect(jsonPath("$.collection.visibility").value("PASSWORD"))
                 .andReturn().getResponse().getContentAsString();
         Number publishedVersion = JsonPath.read(publishedJson, "$.collection.version");
+        String storedPasswordHash = collectionRepository.findByIdAndDeletedFalse(collectionId.longValue())
+                .orElseThrow()
+                .getAccessPasswordHash();
+        org.junit.jupiter.api.Assertions.assertNotEquals(ACCESS_PASSWORD, storedPasswordHash);
+        org.junit.jupiter.api.Assertions.assertTrue(passwordEncoder.matches(ACCESS_PASSWORD, storedPasswordHash));
 
         mockMvc.perform(get("/api/public/collections")
                         .param("keyword", "Published Review Story"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalElements").value(1))
-                .andExpect(jsonPath("$.content[0].id").value(collectionId.longValue()))
-                .andExpect(jsonPath("$.content[0].coverPreviewUrl")
-                        .value(org.hamcrest.Matchers.startsWith("/media/previews/")));
+                .andExpect(jsonPath("$.totalElements").value(0));
 
         mockMvc.perform(get("/api/public/collections/{collectionId}", collectionId.longValue()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("CONTENT_ACCESS_REQUIRED"));
+
+        mockMvc.perform(post("/api/public/collections/{collectionId}/access", collectionId.longValue())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"Wrong@Test123\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("CONTENT_ACCESS_INVALID"));
+
+        String accessCookieHeader = mockMvc.perform(post(
+                                "/api/public/collections/{collectionId}/access",
+                                collectionId.longValue())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"" + ACCESS_PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.expiresAt").isNotEmpty())
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("HttpOnly")))
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("SameSite=Lax")))
+                .andExpect(header().string(
+                        HttpHeaders.SET_COOKIE,
+                        containsString("Path=/api/public/collections/" + collectionId.longValue())))
+                .andReturn().getResponse().getHeader(HttpHeaders.SET_COOKIE);
+        Cookie accessCookie = accessCookie(accessCookieHeader);
+
+        mockMvc.perform(get("/api/public/collections/{collectionId}", collectionId.longValue())
+                        .cookie(accessCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.photos.length()").value(1))
                 .andExpect(jsonPath("$.photos[0].id").value(coverPhotoId.longValue()))
                 .andExpect(jsonPath("$.photos[0].previewUrl")
                         .value(org.hamcrest.Matchers.startsWith("/media/previews/")))
                 .andExpect(jsonPath("$.photos[0].originalPath").doesNotExist());
+
+        mockMvc.perform(delete("/api/collections/{collectionId}", collectionId.longValue())
+                        .header("Authorization", bearer(ownerToken))
+                        .param("version", publishedVersion.toString()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("COLLECTION_PUBLISHED_LOCKED"));
 
         mockMvc.perform(put("/api/collections/{collectionId}", collectionId.longValue())
                         .header("Authorization", bearer(ownerToken))
@@ -322,7 +366,8 @@ class CollectionReviewFlowTests {
                 .andReturn().getResponse().getContentAsString();
         Number offlineVersion = JsonPath.read(offlineJson, "$.collection.version");
 
-        mockMvc.perform(get("/api/public/collections/{collectionId}", collectionId.longValue()))
+        mockMvc.perform(get("/api/public/collections/{collectionId}", collectionId.longValue())
+                        .cookie(accessCookie))
                 .andExpect(status().isNotFound());
 
         String updatedOfflineJson = mockMvc.perform(put(
@@ -377,6 +422,13 @@ class CollectionReviewFlowTests {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         org.junit.jupiter.api.Assertions.assertTrue(ImageIO.write(image, "jpeg", output));
         return output.toByteArray();
+    }
+
+    private Cookie accessCookie(String setCookieHeader) {
+        org.junit.jupiter.api.Assertions.assertNotNull(setCookieHeader);
+        String nameValue = setCookieHeader.split(";", 2)[0];
+        String[] parts = nameValue.split("=", 2);
+        return new Cookie(parts[0], parts[1]);
     }
 
     private SystemUser ensureAccount(String mobile, String accountType, String displayName) {

@@ -18,4 +18,16 @@ export const publicApi = {
   collection(collectionId) {
     return http.get(`/collections/${collectionId}`)
   },
+  collectionAccess(collectionId, password) {
+    return http.post(`/collections/${collectionId}/access`, { password })
+  },
+  projects(params = {}) {
+    return http.get('/projects', { params })
+  },
+  project(projectId) {
+    return http.get(`/projects/${projectId}`)
+  },
+  projectAccess(projectId, password) {
+    return http.post(`/projects/${projectId}/access`, { password })
+  },
 }

@@ -1,6 +1,11 @@
 package com.wedding.platform.content.review.web;
 
 import com.jayway.jsonpath.JsonPath;
+import com.wedding.platform.content.project.persistence.entity.WeddingProject;
+import com.wedding.platform.content.project.persistence.repository.WeddingProjectRepository;
+import com.wedding.platform.content.shared.ContentVisibility;
+import com.wedding.platform.content.shared.PublishStatus;
+import com.wedding.platform.content.shared.ReviewStatus;
 import com.wedding.platform.system.account.persistence.entity.SystemRole;
 import com.wedding.platform.system.account.persistence.entity.SystemUser;
 import com.wedding.platform.system.account.persistence.repository.SystemRoleRepository;
@@ -11,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -19,13 +25,20 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.time.Instant;
+import java.time.LocalDate;
+
+import jakarta.servlet.http.Cookie;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.containsString;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -36,6 +49,7 @@ class ProjectReviewRevisionFlowTests {
     private static final String ADMIN_MOBILE = "13800000501";
     private static final String OWNER_MOBILE = "13900000501";
     private static final String OUTSIDER_MOBILE = "13900000502";
+    private static final String ACCESS_PASSWORD = "Project@Guest123";
 
     @Autowired
     private MockMvc mockMvc;
@@ -48,6 +62,9 @@ class ProjectReviewRevisionFlowTests {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private WeddingProjectRepository projectRepository;
 
     @BeforeEach
     void createAccounts() {
@@ -256,7 +273,7 @@ class ProjectReviewRevisionFlowTests {
                                 }
                                 """.formatted(readyVersion.longValue())))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("PASSWORD_VISIBILITY_NOT_SUPPORTED"));
+                .andExpect(jsonPath("$.code").value("ACCESS_PASSWORD_INVALID"));
 
         mockMvc.perform(post("/api/admin/reviews/projects/{projectId}/publish", projectId.longValue())
                         .header("Authorization", bearer(ownerToken))
@@ -286,6 +303,26 @@ class ProjectReviewRevisionFlowTests {
                 .andExpect(jsonPath("$.project.publishedAt").isNotEmpty())
                 .andReturn().getResponse().getContentAsString();
         Number publishedVersion = JsonPath.read(publishedJson, "$.project.version");
+
+        mockMvc.perform(get("/api/public/projects")
+                        .param("keyword", "Revised Project Title"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(projectId.longValue()))
+                .andExpect(jsonPath("$.content[0].projectCode").doesNotExist());
+
+        mockMvc.perform(get("/api/public/projects/{projectId}", projectId.longValue()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.project.title").value("Revised Project Title"))
+                .andExpect(jsonPath("$.project.locationText").value("Hangzhou"))
+                .andExpect(jsonPath("$.project.projectCode").doesNotExist())
+                .andExpect(jsonPath("$.collections.length()").value(0));
+
+        mockMvc.perform(delete("/api/projects/{projectId}", projectId.longValue())
+                        .header("Authorization", bearer(ownerToken))
+                        .param("version", publishedVersion.toString()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("PROJECT_PUBLISHED_LOCKED"));
 
         mockMvc.perform(put("/api/projects/{projectId}", projectId.longValue())
                         .header("Authorization", bearer(ownerToken))
@@ -339,6 +376,58 @@ class ProjectReviewRevisionFlowTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reviewStatus").value("DRAFT"))
                 .andExpect(jsonPath("$.publishStatus").value("OFFLINE"));
+    }
+
+    @Test
+    void passwordProtectedProjectRequiresAScopedShortTermSession() throws Exception {
+        SystemUser admin = ensureAccount(ADMIN_MOBILE, "ADMIN", "Project Review Admin");
+        SystemUser owner = ensureAccount(OWNER_MOBILE, "CREATOR", "Project Review Owner");
+        WeddingProject project = new WeddingProject();
+        project.setProjectCode("WP-ACCESS-20260717");
+        project.setTitle("Password Protected Project");
+        project.setCoupleDisplayName("L & Y");
+        project.setEventDate(LocalDate.of(2026, 10, 18));
+        project.setRegionCode("330100");
+        project.setLocationText("Hangzhou Private Venue");
+        project.setDescription("A password protected public project detail");
+        project.setVisibility(ContentVisibility.PASSWORD);
+        project.setAccessPasswordHash(passwordEncoder.encode(ACCESS_PASSWORD));
+        project.setReviewStatus(ReviewStatus.APPROVED);
+        project.setPublishStatus(PublishStatus.PUBLISHED);
+        project.setPublishedAt(Instant.now());
+        project.setPublishedBy(admin.getId());
+        project.setCreatedBy(owner.getId());
+        project.setUpdatedBy(admin.getId());
+        WeddingProject saved = projectRepository.saveAndFlush(project);
+
+        mockMvc.perform(get("/api/public/projects")
+                        .param("keyword", "Password Protected Project"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0));
+
+        mockMvc.perform(get("/api/public/projects/{projectId}", saved.getId()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("CONTENT_ACCESS_REQUIRED"));
+
+        String setCookie = mockMvc.perform(post("/api/public/projects/{projectId}/access", saved.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"" + ACCESS_PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("HttpOnly")))
+                .andExpect(header().string(
+                        HttpHeaders.SET_COOKIE,
+                        containsString("Path=/api/public/projects/" + saved.getId())))
+                .andReturn().getResponse().getHeader(HttpHeaders.SET_COOKIE);
+        Cookie cookie = accessCookie(setCookie);
+
+        mockMvc.perform(get("/api/public/projects/{projectId}", saved.getId())
+                        .cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.project.title").value("Password Protected Project"));
+
+        mockMvc.perform(get("/api/public/collections/{collectionId}", saved.getId())
+                        .cookie(cookie))
+                .andExpect(status().isNotFound());
     }
 
     private String reviewFields(
@@ -399,5 +488,12 @@ class ProjectReviewRevisionFlowTests {
 
     private String bearer(String token) {
         return "Bearer " + token;
+    }
+
+    private Cookie accessCookie(String setCookieHeader) {
+        org.junit.jupiter.api.Assertions.assertNotNull(setCookieHeader);
+        String nameValue = setCookieHeader.split(";", 2)[0];
+        String[] parts = nameValue.split("=", 2);
+        return new Cookie(parts[0], parts[1]);
     }
 }

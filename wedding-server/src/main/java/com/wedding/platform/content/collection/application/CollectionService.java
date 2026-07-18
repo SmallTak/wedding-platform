@@ -229,6 +229,31 @@ public class CollectionService {
     }
 
     @Transactional
+    public void deleteCollection(
+            Long operatorId,
+            Long collectionId,
+            Long version,
+            String ipAddress
+    ) {
+        SystemUser actor = getActor(operatorId);
+        requireCollectionAccount(actor);
+        WorkCollection collection = getCollection(collectionId);
+        requireCollectionAccess(actor, collection);
+        requireEditable(collection);
+        requireVersion(collection, version);
+
+        reviewRevisionService.cancelPendingSubmission(ReviewTargetType.COLLECTION, collectionId, operatorId);
+        Instant now = Instant.now();
+        collection.setDeleted(true);
+        collection.setDeletedAt(now);
+        collection.setUpdatedBy(operatorId);
+        collection.setUpdatedAt(now);
+        collectionRepository.saveAndFlush(collection);
+        auditLogService.record(operatorId, actor.getAccountType(), "COLLECTION", "DELETE_COLLECTION",
+                "WORK_COLLECTION", collectionId, "Work collection logically deleted", ipAddress);
+    }
+
+    @Transactional
     public CollectionDtos.CollectionResponse assignCreators(
             Long operatorId,
             Long collectionId,

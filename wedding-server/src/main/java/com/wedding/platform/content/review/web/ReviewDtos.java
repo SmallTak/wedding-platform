@@ -85,6 +85,8 @@ public final class ReviewDtos {
             Long version,
             @NotNull(message = "Visibility is required")
             ContentVisibility visibility,
+            @Size(max = 64, message = "Access password is too long")
+            String accessPassword,
             @NotNull(message = "Featured flag is required")
             Boolean featured,
             @NotNull(message = "Pinned flag is required")
@@ -99,7 +101,9 @@ public final class ReviewDtos {
             @PositiveOrZero(message = "Version must not be negative")
             Long version,
             @NotNull(message = "Visibility is required")
-            ContentVisibility visibility
+            ContentVisibility visibility,
+            @Size(max = 64, message = "Access password is too long")
+            String accessPassword
     ) {
     }
 

@@ -1,6 +1,7 @@
 package com.wedding.platform.content.project.persistence.repository;
 
 import com.wedding.platform.content.project.persistence.entity.WeddingProject;
+import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
 import com.wedding.platform.content.shared.ReviewStatus;
 import org.springframework.data.domain.Page;
@@ -14,6 +15,8 @@ import java.util.Optional;
 public interface WeddingProjectRepository extends JpaRepository<WeddingProject, Long> {
 
     Optional<WeddingProject> findByIdAndDeletedFalse(Long id);
+
+    Optional<WeddingProject> findByIdAndDeletedFalseAndPublishStatus(Long id, PublishStatus publishStatus);
 
     boolean existsByProjectCode(String projectCode);
 
@@ -56,6 +59,30 @@ public interface WeddingProjectRepository extends JpaRepository<WeddingProject, 
             """)
     Page<WeddingProject> findAccessibleProjects(
             @Param("userId") Long userId,
+            @Param("keyword") String keyword,
+            Pageable pageable
+    );
+
+    @Query("""
+            SELECT project
+            FROM WeddingProject project
+            WHERE project.deleted = false
+              AND project.publishStatus = :publishStatus
+              AND project.visibility = :visibility
+              AND (:regionCode IS NULL OR project.regionCode = :regionCode)
+              AND (
+                :keyword IS NULL
+                OR LOWER(project.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                OR LOWER(project.coupleDisplayName) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                OR LOWER(project.locationText) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                OR LOWER(project.description) LIKE LOWER(CONCAT('%', :keyword, '%'))
+              )
+            ORDER BY project.publishedAt DESC, project.id DESC
+            """)
+    Page<WeddingProject> findPublicProjects(
+            @Param("publishStatus") PublishStatus publishStatus,
+            @Param("visibility") ContentVisibility visibility,
+            @Param("regionCode") String regionCode,
             @Param("keyword") String keyword,
             Pageable pageable
     );

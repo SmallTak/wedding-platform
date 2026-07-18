@@ -11,10 +11,12 @@ import {
   Rocket,
   Search,
   Send,
+  Trash2,
   Undo2,
   UsersRound,
 } from '@lucide/vue'
 import { projectApi, reviewApi } from '../api/content'
+import PublicationDialog from '../components/PublicationDialog.vue'
 import http from '../api/http'
 import { useAuthStore } from '../stores/auth'
 import {
@@ -35,6 +37,7 @@ const saving = ref(false)
 const assigning = ref(false)
 const submittingId = ref(null)
 const publishingId = ref(null)
+const deletingId = ref(null)
 const creatorsLoading = ref(false)
 const reviewLoading = ref(false)
 const projects = ref([])
@@ -46,10 +49,12 @@ const totalElements = ref(0)
 const formDialogVisible = ref(false)
 const creatorDialogVisible = ref(false)
 const reviewDialogVisible = ref(false)
+const publicationDialogVisible = ref(false)
 const editingId = ref(null)
 const creatorProject = ref(null)
 const creatorUserIds = ref([])
 const reviewDetail = ref(null)
+const publicationProject = ref(null)
 
 const form = reactive({
   version: null,
@@ -258,23 +263,23 @@ async function openReviewDialog(project) {
   }
 }
 
-async function publishProject(project) {
-  try {
-    await ElMessageBox.confirm(
-      '发布后项目公共资料将被锁定，管理员下架后才能继续编辑。',
-      '发布婚礼项目',
-      { confirmButtonText: '公开发布', cancelButtonText: '取消', type: 'warning' },
-    )
-  } catch {
-    return
-  }
+function publishProject(project) {
+  publicationProject.value = project
+  publicationDialogVisible.value = true
+}
+
+async function confirmProjectPublication(settings) {
+  const project = publicationProject.value
+  if (!project) return
   publishingId.value = project.id
   try {
     await reviewApi.publishProject(project.id, {
       version: project.version,
-      visibility: 'PUBLIC',
+      ...settings,
     })
     ElMessage.success('婚礼项目已发布')
+    publicationDialogVisible.value = false
+    publicationProject.value = null
     await loadProjects()
   } catch (error) {
     ElMessage.error(apiErrorMessage(error, '婚礼项目发布失败'))
@@ -310,6 +315,33 @@ async function offlineProject(project) {
     if (isVersionConflict(error)) await loadProjects()
   } finally {
     publishingId.value = null
+  }
+}
+
+async function deleteProject(project) {
+  try {
+    await ElMessageBox.confirm(
+      `确认删除“${project.title}”？删除后不会在工作台和官网显示。`,
+      '删除婚礼项目',
+      {
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+  deletingId.value = project.id
+  try {
+    await projectApi.delete(project.id, project.version)
+    ElMessage.success('婚礼项目已删除')
+    await loadProjects()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '婚礼项目删除失败'))
+    if (isVersionConflict(error)) await loadProjects()
+  } finally {
+    deletingId.value = null
   }
 }
 
@@ -434,6 +466,16 @@ function creatorNames(project) {
             >
               <UsersRound :size="16" />
             </button>
+            <button
+              class="danger-command"
+              type="button"
+              aria-label="删除婚礼项目"
+              title="删除婚礼项目"
+              :disabled="project.publishStatus === 'PUBLISHED' || deletingId === project.id"
+              @click="deleteProject(project)"
+            >
+              <Trash2 :size="16" />
+            </button>
           </div>
         </article>
         <div v-if="!loading && projects.length === 0" class="empty-table">暂无符合条件的婚礼项目</div>
@@ -472,6 +514,13 @@ function creatorNames(project) {
         </el-button>
       </template>
     </el-dialog>
+
+    <PublicationDialog
+      v-model="publicationDialogVisible"
+      target-label="婚礼项目"
+      :loading="Boolean(publicationProject && publishingId === publicationProject.id)"
+      @submit="confirmProjectPublication"
+    />
 
     <el-dialog
       v-model="reviewDialogVisible"

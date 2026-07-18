@@ -1148,6 +1148,7 @@ textarea {
 
 .row-commands {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -1166,6 +1167,11 @@ textarea {
 .row-commands button:hover {
   border-color: var(--green);
   color: var(--green);
+}
+
+.row-commands .danger-command:hover:not(:disabled) {
+  border-color: var(--red);
+  color: var(--red);
 }
 
 .empty-table {
@@ -1419,15 +1425,17 @@ textarea {
 }
 
 .project-management-table .management-row {
-  min-width: 1100px;
+  min-width: 920px;
   display: grid;
-  grid-template-columns: minmax(220px, 1.35fr) minmax(190px, 1.1fr) minmax(180px, 1fr) 82px 82px 150px;
+  grid-template-columns: minmax(200px, 1.35fr) minmax(160px, 1.05fr) minmax(140px, 0.95fr) 70px 70px 112px;
+  gap: 12px;
 }
 
 .collection-management-table .management-row {
-  min-width: 1210px;
+  min-width: 980px;
   display: grid;
-  grid-template-columns: minmax(240px, 1.4fr) minmax(180px, 1.05fr) minmax(160px, 0.95fr) minmax(170px, 1fr) 82px 82px 116px;
+  grid-template-columns: minmax(190px, 1.3fr) minmax(145px, 0.95fr) minmax(130px, 0.85fr) minmax(140px, 0.9fr) 70px 70px 112px;
+  gap: 12px;
 }
 
 .config-management-table .management-row {
@@ -1543,6 +1551,32 @@ textarea {
 
 .management-dialog {
   max-width: calc(100vw - 32px);
+}
+
+.publication-form {
+  display: grid;
+  gap: 20px;
+}
+
+.publication-form label {
+  display: grid;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.publication-form .el-radio-group {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.publication-form .el-radio-button {
+  min-width: 0;
+}
+
+.publication-form .el-radio-button__inner {
+  width: 100%;
 }
 
 .management-form {
@@ -2397,6 +2431,68 @@ textarea {
 
   .management-toolbar .toolbar-commands {
     justify-content: flex-end;
+  }
+
+  .project-management-table,
+  .collection-management-table {
+    overflow: visible;
+  }
+
+  .project-management-table .management-table-head,
+  .collection-management-table .management-table-head {
+    display: none;
+  }
+
+  .project-management-table .management-row,
+  .collection-management-table .management-row {
+    min-width: 0;
+    padding: 18px 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    align-items: start;
+  }
+
+  .project-management-table .primary-cell,
+  .project-management-table .project-place,
+  .project-management-table .creator-cell,
+  .project-management-table .row-commands,
+  .collection-management-table .primary-cell,
+  .collection-management-table .association-cell,
+  .collection-management-table .taxonomy-cell,
+  .collection-management-table .creator-cell,
+  .collection-management-table .row-commands {
+    grid-column: 1 / -1;
+  }
+
+  .project-management-table [data-label]::before,
+  .collection-management-table [data-label]::before {
+    content: attr(data-label);
+    margin-bottom: 5px;
+    display: block;
+    color: var(--muted);
+    font-size: 10px;
+  }
+
+  .project-management-table .state-chip,
+  .collection-management-table .state-chip {
+    width: 100%;
+    min-height: 32px;
+  }
+
+  .project-management-table .state-chip::before,
+  .collection-management-table .state-chip::before {
+    margin: 0 7px 0 0;
+    color: inherit;
+  }
+
+  .project-management-table .row-commands,
+  .collection-management-table .row-commands {
+    padding-top: 4px;
+  }
+
+  .project-management-table .row-commands::before,
+  .collection-management-table .row-commands::before {
+    flex: 0 0 100%;
   }
 
   .segmented-control {

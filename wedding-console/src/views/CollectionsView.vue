@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   FolderHeart,
   ImagePlus,
@@ -9,10 +9,14 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Rocket,
   Search,
+  Trash2,
+  Undo2,
   UsersRound,
 } from '@lucide/vue'
-import { collectionApi, projectApi } from '../api/content'
+import { collectionApi, projectApi, reviewApi } from '../api/content'
+import PublicationDialog from '../components/PublicationDialog.vue'
 import http from '../api/http'
 import { useAuthStore } from '../stores/auth'
 import {
@@ -30,6 +34,8 @@ const supportLoading = ref(false)
 const saving = ref(false)
 const assigning = ref(false)
 const creatorsLoading = ref(false)
+const deletingId = ref(null)
+const publishingId = ref(null)
 const collections = ref([])
 const projectOptions = ref([])
 const categoryOptions = ref([])
@@ -41,9 +47,11 @@ const size = ref(20)
 const totalElements = ref(0)
 const formDialogVisible = ref(false)
 const creatorDialogVisible = ref(false)
+const publicationDialogVisible = ref(false)
 const editingId = ref(null)
 const editingCollection = ref(null)
 const creatorCollection = ref(null)
+const publicationCollection = ref(null)
 const creatorUserIds = ref([])
 
 const filters = reactive({
@@ -305,6 +313,91 @@ function tagNames(collection) {
 function openPhotos(collection) {
   router.push({ name: 'collection-photos', params: { collectionId: collection.id } })
 }
+
+function publishCollection(collection) {
+  publicationCollection.value = collection
+  publicationDialogVisible.value = true
+}
+
+async function confirmCollectionPublication(settings) {
+  const collection = publicationCollection.value
+  if (!collection) return
+  publishingId.value = collection.id
+  try {
+    await reviewApi.publish(collection.id, {
+      version: collection.version,
+      ...settings,
+      featured: collection.featured || false,
+      pinned: collection.pinned || false,
+      sortOrder: collection.sortOrder || 0,
+    })
+    ElMessage.success('作品集已发布')
+    publicationDialogVisible.value = false
+    publicationCollection.value = null
+    await loadCollections()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '作品集发布失败'))
+    if (isVersionConflict(error)) await loadCollections()
+  } finally {
+    publishingId.value = null
+  }
+}
+
+async function offlineCollection(collection) {
+  let reason
+  try {
+    const result = await ElMessageBox.prompt('填写下架原因', '下架作品集', {
+      confirmButtonText: '确认下架',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputValidator: (value) => Boolean(value?.trim()) || '请输入下架原因',
+    })
+    reason = result.value.trim()
+  } catch {
+    return
+  }
+  publishingId.value = collection.id
+  try {
+    await reviewApi.offline(collection.id, {
+      version: collection.version,
+      reason,
+    })
+    ElMessage.success('作品集已下架')
+    await loadCollections()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '作品集下架失败'))
+    if (isVersionConflict(error)) await loadCollections()
+  } finally {
+    publishingId.value = null
+  }
+}
+
+async function deleteCollection(collection) {
+  try {
+    await ElMessageBox.confirm(
+      `确认删除“${collection.title}”？作品图片文件会保留，但作品集不再显示。`,
+      '删除作品集',
+      {
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+  deletingId.value = collection.id
+  try {
+    await collectionApi.delete(collection.id, collection.version)
+    ElMessage.success('作品集已删除')
+    await loadCollections()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, '作品集删除失败'))
+    if (isVersionConflict(error)) await loadCollections()
+  } finally {
+    deletingId.value = null
+  }
+}
 </script>
 
 <template>
@@ -400,6 +493,36 @@ function openPhotos(collection) {
               @click="openCreatorDialog(collection)"
             >
               <UsersRound :size="16" />
+            </button>
+            <button
+              v-if="isAdmin && collection.publishStatus === 'READY'"
+              type="button"
+              aria-label="发布作品集"
+              title="发布作品集"
+              :disabled="publishingId === collection.id"
+              @click="publishCollection(collection)"
+            >
+              <Rocket :size="16" />
+            </button>
+            <button
+              v-if="isAdmin && collection.publishStatus === 'PUBLISHED'"
+              type="button"
+              aria-label="下架作品集"
+              title="下架作品集"
+              :disabled="publishingId === collection.id"
+              @click="offlineCollection(collection)"
+            >
+              <Undo2 :size="16" />
+            </button>
+            <button
+              class="danger-command"
+              type="button"
+              aria-label="删除作品集"
+              title="删除作品集"
+              :disabled="collection.publishStatus === 'PUBLISHED' || deletingId === collection.id"
+              @click="deleteCollection(collection)"
+            >
+              <Trash2 :size="16" />
             </button>
           </div>
         </article>
@@ -497,5 +620,12 @@ function openPhotos(collection) {
         <el-button type="primary" :loading="assigning" @click="assignCreators">保存共同创作者</el-button>
       </template>
     </el-dialog>
+
+    <PublicationDialog
+      v-model="publicationDialogVisible"
+      target-label="作品集"
+      :loading="publishingId !== null"
+      @submit="confirmCollectionPublication"
+    />
   </main>
 </template>

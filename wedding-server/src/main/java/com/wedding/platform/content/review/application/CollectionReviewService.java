@@ -11,6 +11,7 @@ import com.wedding.platform.content.media.persistence.entity.MediaAsset;
 import com.wedding.platform.content.media.persistence.repository.CollectionPhotoRepository;
 import com.wedding.platform.content.media.persistence.repository.MediaAssetRepository;
 import com.wedding.platform.content.project.persistence.repository.WeddingProjectRepository;
+import com.wedding.platform.content.publication.application.PublicContentAccessService;
 import com.wedding.platform.content.review.web.ReviewDtos;
 import com.wedding.platform.content.review.persistence.entity.ReviewItem;
 import com.wedding.platform.content.review.persistence.entity.ReviewItemStatus;
@@ -53,6 +54,7 @@ public class CollectionReviewService {
     private final CollectionPhotoService photoService;
     private final AuditLogService auditLogService;
     private final ReviewRevisionService reviewRevisionService;
+    private final PublicContentAccessService contentAccessService;
 
     public CollectionReviewService(
             WorkCollectionRepository collectionRepository,
@@ -66,7 +68,8 @@ public class CollectionReviewService {
             CollectionService collectionService,
             CollectionPhotoService photoService,
             AuditLogService auditLogService,
-            ReviewRevisionService reviewRevisionService
+            ReviewRevisionService reviewRevisionService,
+            PublicContentAccessService contentAccessService
     ) {
         this.collectionRepository = collectionRepository;
         this.photoRepository = photoRepository;
@@ -79,6 +82,7 @@ public class CollectionReviewService {
         this.photoService = photoService;
         this.auditLogService = auditLogService;
         this.reviewRevisionService = reviewRevisionService;
+        this.contentAccessService = contentAccessService;
     }
 
     @Transactional
@@ -397,10 +401,6 @@ public class CollectionReviewService {
         requireAdmin(actor);
         WorkCollection collection = getCollection(collectionId);
         requireVersion(collection, request.version());
-        if (ContentVisibility.PASSWORD == request.visibility()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "PASSWORD_VISIBILITY_NOT_SUPPORTED",
-                    "Password-protected publishing is not available yet");
-        }
         if (ReviewStatus.APPROVED != collection.getReviewStatus()
                 || PublishStatus.READY != collection.getPublishStatus()) {
             throw new ApiException(HttpStatus.CONFLICT, "COLLECTION_NOT_READY",
@@ -422,6 +422,9 @@ public class CollectionReviewService {
 
         Instant now = Instant.now();
         collection.setVisibility(request.visibility());
+        collection.setAccessPasswordHash(ContentVisibility.PASSWORD == request.visibility()
+                ? contentAccessService.encodePassword(request.accessPassword())
+                : null);
         collection.setFeatured(request.featured());
         collection.setPinned(request.pinned());
         collection.setSortOrder(request.sortOrder());

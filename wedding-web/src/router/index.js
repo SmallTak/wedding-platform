@@ -20,6 +20,22 @@ const router = createRouter({
         title: '婚礼作品',
       },
     },
+    {
+      path: '/projects',
+      name: 'project-list',
+      component: () => import('../views/ProjectListView.vue'),
+      meta: {
+        title: '婚礼项目',
+      },
+    },
+    {
+      path: '/projects/:projectId',
+      name: 'project-detail',
+      component: () => import('../views/ProjectDetailView.vue'),
+      meta: {
+        title: '婚礼项目',
+      },
+    },
   ],
   scrollBehavior() {
     return { top: 0 }

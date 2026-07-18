@@ -4,6 +4,7 @@ import com.wedding.platform.content.project.application.ProjectService;
 import com.wedding.platform.content.project.persistence.entity.WeddingProject;
 import com.wedding.platform.content.project.persistence.repository.ProjectCreatorRepository;
 import com.wedding.platform.content.project.persistence.repository.WeddingProjectRepository;
+import com.wedding.platform.content.publication.application.PublicContentAccessService;
 import com.wedding.platform.content.review.persistence.entity.ReviewItem;
 import com.wedding.platform.content.review.persistence.entity.ReviewItemStatus;
 import com.wedding.platform.content.review.persistence.entity.ReviewItemType;
@@ -38,6 +39,7 @@ public class ProjectReviewService {
     private final ProjectService projectService;
     private final ReviewRevisionService reviewRevisionService;
     private final AuditLogService auditLogService;
+    private final PublicContentAccessService contentAccessService;
 
     public ProjectReviewService(
             WeddingProjectRepository projectRepository,
@@ -45,7 +47,8 @@ public class ProjectReviewService {
             SystemUserRepository userRepository,
             ProjectService projectService,
             ReviewRevisionService reviewRevisionService,
-            AuditLogService auditLogService
+            AuditLogService auditLogService,
+            PublicContentAccessService contentAccessService
     ) {
         this.projectRepository = projectRepository;
         this.projectCreatorRepository = projectCreatorRepository;
@@ -53,6 +56,7 @@ public class ProjectReviewService {
         this.projectService = projectService;
         this.reviewRevisionService = reviewRevisionService;
         this.auditLogService = auditLogService;
+        this.contentAccessService = contentAccessService;
     }
 
     @Transactional
@@ -248,10 +252,6 @@ public class ProjectReviewService {
         requireAdmin(actor);
         WeddingProject project = getProject(projectId);
         requireVersion(project, request.version());
-        if (ContentVisibility.PASSWORD == request.visibility()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "PASSWORD_VISIBILITY_NOT_SUPPORTED",
-                    "Password-protected publishing is not available yet");
-        }
         if (ReviewStatus.APPROVED != project.getReviewStatus()
                 || PublishStatus.READY != project.getPublishStatus()) {
             throw new ApiException(HttpStatus.CONFLICT, "PROJECT_NOT_READY",
@@ -267,6 +267,9 @@ public class ProjectReviewService {
 
         Instant now = Instant.now();
         project.setVisibility(request.visibility());
+        project.setAccessPasswordHash(ContentVisibility.PASSWORD == request.visibility()
+                ? contentAccessService.encodePassword(request.accessPassword())
+                : null);
         project.setPublishStatus(PublishStatus.PUBLISHED);
         project.setPublishedAt(now);
         project.setPublishedBy(operatorId);

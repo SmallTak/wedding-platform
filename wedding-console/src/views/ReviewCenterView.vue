@@ -14,6 +14,7 @@ import {
   X,
 } from '@lucide/vue'
 import { reviewApi } from '../api/content'
+import PublicationDialog from '../components/PublicationDialog.vue'
 import {
   apiErrorMessage,
   formatDateTime,
@@ -33,6 +34,7 @@ const page = ref(0)
 const size = ref(20)
 const totalElements = ref(0)
 const detailVisible = ref(false)
+const publicationDialogVisible = ref(false)
 const detail = ref(null)
 const selectedFieldIds = ref([])
 const selectedPhotoIds = ref([])
@@ -261,35 +263,32 @@ async function rejectRemainingFields() {
   )
 }
 
-async function publishTarget() {
+function publishTarget() {
   if (!currentTarget.value) return
-  try {
-    await ElMessageBox.confirm(
-      isProject.value
-        ? '发布后项目公共资料将被锁定，管理员下架后才能继续编辑。'
-        : '发布后官网将立即展示该作品集，创作者内容编辑会被锁定。',
-      isProject.value ? '发布婚礼项目' : '发布作品集',
-      { confirmButtonText: '公开发布', cancelButtonText: '取消', type: 'warning' },
-    )
-  } catch {
-    return
-  }
+  publicationDialogVisible.value = true
+}
+
+async function confirmPublication(settings) {
+  if (!currentTarget.value) return
   await runTargetMutation(
     () => isProject.value
       ? reviewApi.publishProject(currentTarget.value.id, {
           version: currentTarget.value.version,
-          visibility: 'PUBLIC',
+          ...settings,
         })
       : reviewApi.publish(currentTarget.value.id, {
           version: currentTarget.value.version,
-          visibility: 'PUBLIC',
+          ...settings,
           featured: currentTarget.value.featured || false,
           pinned: currentTarget.value.pinned || false,
           sortOrder: currentTarget.value.sortOrder || 0,
         }),
-    isProject.value ? '婚礼项目已发布' : '作品集已公开发布',
+    isProject.value ? '婚礼项目已发布' : '作品集已发布',
     isProject.value ? '婚礼项目发布失败' : '作品集发布失败',
   )
+  if (currentTarget.value?.publishStatus === 'PUBLISHED') {
+    publicationDialogVisible.value = false
+  }
 }
 
 async function offlineTarget() {
@@ -629,5 +628,12 @@ async function reloadDetail() {
         </template>
       </div>
     </el-drawer>
+
+    <PublicationDialog
+      v-model="publicationDialogVisible"
+      :target-label="isProject ? '婚礼项目' : '作品集'"
+      :loading="mutating"
+      @submit="confirmPublication"
+    />
   </main>
 </template>

@@ -23,6 +23,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -249,6 +250,27 @@ class CollectionFlowTests {
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.content[0].id").value(collectionId.longValue()))
                 .andExpect(jsonPath("$.content[0].version").value(updatedVersion.longValue()));
+
+        mockMvc.perform(delete("/api/collections/{collectionId}", collectionId.longValue())
+                        .header("Authorization", bearer(outsiderToken))
+                        .param("version", updatedVersion.toString()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("COLLECTION_ACCESS_DENIED"));
+
+        mockMvc.perform(delete("/api/collections/{collectionId}", collectionId.longValue())
+                        .header("Authorization", bearer(collaboratorToken))
+                        .param("version", updatedVersion.toString()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/collections/{collectionId}", collectionId.longValue())
+                        .header("Authorization", bearer(ownerToken)))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(get("/api/collections")
+                        .header("Authorization", bearer(adminToken))
+                        .param("keyword", "Collaborative Wedding"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0));
     }
 
     @Test
@@ -300,7 +322,8 @@ class CollectionFlowTests {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("COLLECTION_CREATOR_NOT_IN_PROJECT"));
 
-        mockMvc.perform(put("/api/admin/projects/{projectId}/creators", projectId.longValue())
+        String assignedProjectJson = mockMvc.perform(put(
+                                "/api/admin/projects/{projectId}/creators", projectId.longValue())
                         .header("Authorization", bearer(adminToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -309,14 +332,35 @@ class CollectionFlowTests {
                                   "creatorUserIds": [%d]
                                 }
                                 """.formatted(projectVersion.longValue(), collaborator.getId())))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        Number assignedProjectVersion = JsonPath.read(assignedProjectJson, "$.version");
 
-        mockMvc.perform(put("/api/admin/collections/{collectionId}/creators", collectionId.longValue())
+        String assignedCollectionJson = mockMvc.perform(put(
+                                "/api/admin/collections/{collectionId}/creators", collectionId.longValue())
                         .header("Authorization", bearer(adminToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(assignCollectionRequest))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.creators.length()").value(2));
+                .andExpect(jsonPath("$.creators.length()").value(2))
+                .andReturn().getResponse().getContentAsString();
+        Number assignedCollectionVersion = JsonPath.read(assignedCollectionJson, "$.version");
+
+        mockMvc.perform(delete("/api/projects/{projectId}", projectId.longValue())
+                        .header("Authorization", bearer(ownerToken))
+                        .param("version", assignedProjectVersion.toString()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("PROJECT_COLLECTIONS_EXIST"));
+
+        mockMvc.perform(delete("/api/collections/{collectionId}", collectionId.longValue())
+                        .header("Authorization", bearer(ownerToken))
+                        .param("version", assignedCollectionVersion.toString()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(delete("/api/projects/{projectId}", projectId.longValue())
+                        .header("Authorization", bearer(ownerToken))
+                        .param("version", assignedProjectVersion.toString()))
+                .andExpect(status().isNoContent());
     }
 
     private SystemUser ensureAccount(String mobile, String accountType, String displayName) {

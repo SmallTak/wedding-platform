@@ -88,6 +88,7 @@ async function selectCategory(categoryId) {
       </RouterLink>
 
       <nav :class="['site-nav', { 'is-open': menuOpen }]" aria-label="主导航">
+        <RouterLink :to="{ name: 'project-list' }" @click="menuOpen = false">婚礼项目</RouterLink>
         <a href="#works" @click="menuOpen = false">婚礼作品</a>
         <a href="#categories" @click="menuOpen = false">作品分类</a>
         <a href="#contact" @click="menuOpen = false">预约咨询</a>
