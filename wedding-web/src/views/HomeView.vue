@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { ArrowUpRight, CalendarDays, Menu, Search, Send, Star, X } from '@lucide/vue'
-import heroImage from '../assets/wedding-hero.jpg'
+import heroImage from '../assets/wedding-hero.png'
 import { publicApi } from '../api/public'
 import BrandLogo from '../components/BrandLogo.vue'
 

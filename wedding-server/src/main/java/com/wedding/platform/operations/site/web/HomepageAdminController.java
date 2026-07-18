@@ -37,6 +37,20 @@ public class HomepageAdminController {
         return homepageService.replace(userId(jwt), request, clientIp(servletRequest));
     }
 
+    @GetMapping("/carousel")
+    public HomepageDtos.CarouselOptions carouselOptions(@AuthenticationPrincipal Jwt jwt) {
+        return homepageService.carouselOptions(userId(jwt));
+    }
+
+    @PutMapping("/carousel")
+    public HomepageDtos.CarouselOptions replaceCarousel(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody HomepageDtos.ReplaceCarouselRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        return homepageService.replaceCarousel(userId(jwt), request, clientIp(servletRequest));
+    }
+
     private Long userId(Jwt jwt) {
         return Long.valueOf(jwt.getClaimAsString("uid"));
     }

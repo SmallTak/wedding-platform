@@ -5,6 +5,34 @@
 
 ## 2026-07-18
 
+### 运营工作台登录页图片
+
+- 将新的婚礼图片同步为 `wedding-console/src/assets/login-wedding.png`，并将
+  `LoginView.vue` 从旧 JPG 切换到新 PNG；原有 JPG 保留。
+- 验证：使用 `node:22.18.0-bookworm-slim` Docker 和 `/console/` 基础路径执行工作台
+  `npm ci && npm run build`，生产构建通过；主 chunk 仍提示约 `790.95 kB` 的既知警告。
+- 部署：仅备份和替换生产工作台静态目录，未发布官网、后端或数据库变更，未重启后端服务；
+  备份目录为 `/home/apps/wedding-platform/backups/20260718-202703-console-login`。
+- 验证：发布命令确认 Nginx 配置有效、后端服务保持 `active`；线上登录图片 SHA-256 为
+  `ee7724533c76566a4519536076160cf15642dab9da8406e56e58b110d4ddc4f1`，与本地一致。
+
+### 官网首页中国风首屏图片
+
+- 从远程提交 `0df84dd` 获取新的 `wedding-web/src/assets/wedding-hero.png`，尺寸为
+  `1672 × 941`，作为官网首页首屏兜底图。
+- `wedding-web/src/views/HomeView.vue` 已改为引用 PNG；原有 JPG 保留，未删除或覆盖。
+- 验证：执行 `git fetch --prune origin`、图片文件类型检查和 SHA-256 校验，并人工检查构图。
+- 验证：使用 `node:22.18.0-bookworm-slim` Docker 执行官网 `npm run build`，生产构建通过；
+  新图片打包产物约 `2.17 MB`。
+- 部署：仅备份和替换生产官网静态目录，未发布工作台、后端或数据库变更，未重启后端服务；
+  备份目录为 `/home/apps/wedding-platform/backups/20260718-200145-web-hero`。
+- 验证：线上官网目录与本地 `wedding-web/dist` 无差异；新图片 SHA-256 为
+  `ee7724533c76566a4519536076160cf15642dab9da8406e56e58b110d4ddc4f1`，与本地一致。
+- 验证：Nginx 配置检查通过，后端服务保持 `active`；正式首页、工作台、公开状态接口和新图片
+  均返回 `200`，图片响应类型为 `image/png`。
+- 验证：使用正式域名在 `1440x1000` 和 `390x844` 视口检查首页首屏，文字可读、人物主体
+  保留，无明显遮挡或横向溢出。
+
 ### 生产人工验收与当前数据状态
 
 - 用户通过生产管理员主动完成两次咨询提交和一次跟进更新、空首页推荐保存、两个未引用停用分类

@@ -11,7 +11,7 @@ import {
 } from '@lucide/vue'
 import { useAuthStore } from '../stores/auth'
 import BrandLogo from '../components/BrandLogo.vue'
-import loginImage from '../assets/login-wedding.jpg'
+import loginImage from '../assets/login-wedding.png'
 
 const auth = useAuthStore()
 const route = useRoute()
