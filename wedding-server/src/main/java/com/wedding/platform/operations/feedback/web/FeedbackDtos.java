@@ -34,6 +34,20 @@ public final class FeedbackDtos {
     ) {
     }
 
+    public record CustomerFeedbackRequest(
+            @PositiveOrZero(message = "Version must not be negative") Long version,
+            @NotNull(message = "Project id is required") Long projectId,
+            @NotNull(message = "Creator user id is required") Long creatorUserId,
+            @NotNull(message = "Rating is required")
+            @Min(value = 1, message = "Rating must be between 1 and 5")
+            @Max(value = 5, message = "Rating must be between 1 and 5")
+            Integer rating,
+            @NotBlank(message = "Feedback content is required")
+            @Size(max = 2000, message = "Feedback content is too long")
+            String content
+    ) {
+    }
+
     public record RejectRequest(
             @NotNull(message = "Version is required")
             @PositiveOrZero(message = "Version must not be negative")
@@ -126,6 +140,12 @@ public final class FeedbackDtos {
     }
 
     public record FeedbackOptions(
+            List<ProjectSummary> projects,
+            List<CreatorSummary> creators
+    ) {
+    }
+
+    public record CustomerFeedbackOptions(
             List<ProjectSummary> projects,
             List<CreatorSummary> creators
     ) {

@@ -18,14 +18,14 @@ import java.math.BigDecimal;
 @Table(
         name = "homepage_carousel_item",
         uniqueConstraints = @UniqueConstraint(
-                name = "uk_homepage_carousel_photo",
-                columnNames = "photo_id"
+                name = "uk_homepage_carousel_collection",
+                columnNames = "collection_id"
         )
 )
 public class HomepageCarouselItem extends BaseBusinessEntity {
 
-    @Column(name = "photo_id", nullable = false)
-    private Long photoId;
+    @Column(name = "collection_id", nullable = false)
+    private Long collectionId;
 
     @Column(name = "sort_order", nullable = false)
     private Integer sortOrder;

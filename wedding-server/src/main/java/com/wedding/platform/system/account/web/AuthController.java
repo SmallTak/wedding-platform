@@ -30,6 +30,14 @@ public class AuthController {
         return accountService.login(request, clientIp(servletRequest));
     }
 
+    @PostMapping("/auth/register")
+    public AccountDtos.LoginResponse register(
+            @Valid @RequestBody AccountDtos.RegisterCustomerRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        return accountService.registerCustomer(request, clientIp(servletRequest));
+    }
+
     @GetMapping("/auth/me")
     public AccountDtos.AccountResponse me(@AuthenticationPrincipal Jwt jwt) {
         return accountService.getCurrentUser(userId(jwt));
@@ -49,6 +57,14 @@ public class AuthController {
             @Valid @RequestBody AccountDtos.UpdateProfileRequest request
     ) {
         return accountService.updateProfile(userId(jwt), request);
+    }
+
+    @PutMapping("/account/customer-profile")
+    public AccountDtos.AccountResponse updateCustomerProfile(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody AccountDtos.UpdateCustomerProfileRequest request
+    ) {
+        return accountService.updateCustomerProfile(userId(jwt), request);
     }
 
     static Long userId(Jwt jwt) {

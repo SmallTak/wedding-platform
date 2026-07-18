@@ -20,16 +20,19 @@ import {
 } from '@lucide/vue'
 import http from '../api/http'
 import { useAuthStore } from '../stores/auth'
+import { useNotificationStore } from '../stores/notifications'
 import BrandLogo from '../components/BrandLogo.vue'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const notifications = useNotificationStore()
 const serviceOnline = ref(false)
 const mobileMenuOpen = ref(false)
 
 const navItems = [
   { label: '工作台', to: '/', icon: LayoutDashboard, permission: '/dashboard', route: 'dashboard' },
+  { label: '站内消息', to: '/notifications', icon: Bell, permission: '/notifications', route: 'notifications' },
   { label: '婚礼项目', to: '/projects', icon: FolderHeart, permission: '/content/projects', route: 'projects' },
   {
     label: '作品集',
@@ -40,11 +43,12 @@ const navItems = [
   },
   { label: '审核中心', to: '/reviews', icon: ShieldCheck, permission: '/review/collections', route: 'reviews' },
   { label: '创作者', to: '/creators', icon: UsersRound, permission: '/accounts/creators', route: 'creators' },
+  { label: '客户账号', to: '/customers', icon: CircleUserRound, permission: '/accounts/customers', route: 'customers' },
   { label: '分类标签', to: '/content-config', icon: Tags, permission: '/config/content', route: 'content-config' },
   { label: '客户评价', to: '/feedback', icon: MessageSquareText, permission: '/operations/feedback', route: 'feedback' },
   { label: '咨询线索', to: '/inquiries', icon: Inbox, permission: '/operations/inquiries', route: 'inquiries' },
   { label: '首页运营', to: '/site-home', icon: LayoutTemplate, permission: '/site/home', route: 'site-home' },
-  { label: '数据统计', to: '/', icon: BarChart3, permission: '/analytics' },
+  { label: '数据统计', to: '/analytics', icon: BarChart3, permission: '/analytics', route: 'analytics' },
 ]
 
 const visibleNavItems = computed(() => navItems.filter((item) => auth.hasPermission(item.permission)))
@@ -57,6 +61,9 @@ const today = new Intl.DateTimeFormat('zh-CN', {
 }).format(new Date())
 
 onMounted(async () => {
+  if (auth.hasPermission('/notifications')) {
+    notifications.refreshUnreadCount().catch(() => {})
+  }
   try {
     const response = await http.get('/public/status')
     serviceOnline.value = response.data?.status === 'UP'
@@ -96,6 +103,12 @@ function logout() {
         >
           <component :is="item.icon" :size="18" />
           <span>{{ item.label }}</span>
+          <b
+            v-if="item.route === 'notifications' && notifications.unreadCount > 0"
+            class="console-nav-badge"
+          >
+            {{ notifications.unreadCount > 99 ? '99+' : notifications.unreadCount }}
+          </b>
         </RouterLink>
       </nav>
 
@@ -129,10 +142,16 @@ function logout() {
             <X v-if="mobileMenuOpen" :size="19" />
             <Menu v-else :size="19" />
           </button>
-          <button class="header-icon" type="button" aria-label="站内消息" title="站内消息">
+          <RouterLink
+            v-if="auth.hasPermission('/notifications')"
+            class="header-icon"
+            to="/notifications"
+            aria-label="站内消息"
+            title="站内消息"
+          >
             <Bell :size="19" />
-            <i></i>
-          </button>
+            <i v-if="notifications.unreadCount > 0"></i>
+          </RouterLink>
           <button class="header-icon" type="button" aria-label="退出登录" title="退出登录" @click="logout">
             <LogOut :size="18" />
           </button>
@@ -149,6 +168,12 @@ function logout() {
         >
           <component :is="item.icon" :size="18" />
           <span>{{ item.label }}</span>
+          <b
+            v-if="item.route === 'notifications' && notifications.unreadCount > 0"
+            class="console-nav-badge"
+          >
+            {{ notifications.unreadCount > 99 ? '99+' : notifications.unreadCount }}
+          </b>
         </RouterLink>
       </nav>
 

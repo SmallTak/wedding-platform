@@ -17,6 +17,8 @@ public interface WeddingProjectRepository extends JpaRepository<WeddingProject, 
 
     Optional<WeddingProject> findByIdAndDeletedFalse(Long id);
 
+    Optional<WeddingProject> findByProjectCodeAndDeletedFalse(String projectCode);
+
     Optional<WeddingProject> findByIdAndDeletedFalseAndPublishStatus(Long id, PublishStatus publishStatus);
 
     @Query("""
@@ -153,4 +155,6 @@ public interface WeddingProjectRepository extends JpaRepository<WeddingProject, 
     );
 
     long countByDeletedFalseAndReviewStatus(ReviewStatus reviewStatus);
+
+    long countByDeletedFalseAndPublishStatus(PublishStatus publishStatus);
 }

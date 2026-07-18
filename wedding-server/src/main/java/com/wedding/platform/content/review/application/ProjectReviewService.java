@@ -14,6 +14,9 @@ import com.wedding.platform.content.review.web.ReviewDtos;
 import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
 import com.wedding.platform.content.shared.ReviewStatus;
+import com.wedding.platform.operations.notification.application.UserNotificationService;
+import com.wedding.platform.operations.notification.persistence.entity.UserNotificationRelatedType;
+import com.wedding.platform.operations.notification.persistence.entity.UserNotificationType;
 import com.wedding.platform.platform.audit.AuditLogService;
 import com.wedding.platform.platform.web.ApiException;
 import com.wedding.platform.system.account.persistence.entity.SystemUser;
@@ -40,6 +43,7 @@ public class ProjectReviewService {
     private final ReviewRevisionService reviewRevisionService;
     private final AuditLogService auditLogService;
     private final PublicContentAccessService contentAccessService;
+    private final UserNotificationService notificationService;
 
     public ProjectReviewService(
             WeddingProjectRepository projectRepository,
@@ -48,7 +52,8 @@ public class ProjectReviewService {
             ProjectService projectService,
             ReviewRevisionService reviewRevisionService,
             AuditLogService auditLogService,
-            PublicContentAccessService contentAccessService
+            PublicContentAccessService contentAccessService,
+            UserNotificationService notificationService
     ) {
         this.projectRepository = projectRepository;
         this.projectCreatorRepository = projectCreatorRepository;
@@ -57,6 +62,7 @@ public class ProjectReviewService {
         this.reviewRevisionService = reviewRevisionService;
         this.auditLogService = auditLogService;
         this.contentAccessService = contentAccessService;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -92,6 +98,14 @@ public class ProjectReviewService {
             project.setPublishStatus(PublishStatus.UNPUBLISHED);
         }
         saveProject(project, operatorId);
+        notificationService.notifyAdmins(
+                operatorId,
+                UserNotificationType.PROJECT_REVIEW_TASK,
+                "婚礼项目待审核",
+                "项目“" + project.getTitle() + "”已提交审核，请及时处理。",
+                UserNotificationRelatedType.PROJECT_REVIEW,
+                projectId
+        );
         auditLogService.record(operatorId, actor.getAccountType(), "PROJECT_REVIEW", "SUBMIT_PROJECT",
                 "WEDDING_PROJECT", projectId, "Project submitted for field review", ipAddress);
         return detail(operatorId, projectId);
@@ -154,6 +168,7 @@ public class ProjectReviewService {
         requireAdmin(actor);
         WeddingProject project = getProject(projectId);
         requireVersion(project, request.version());
+        ReviewStatus previousStatus = project.getReviewStatus();
         reviewRevisionService.ensureProjectBaseline(project);
         if (ReviewStatus.PENDING != project.getReviewStatus()
                 && ReviewStatus.PARTIALLY_REJECTED != project.getReviewStatus()) {
@@ -170,6 +185,7 @@ public class ProjectReviewService {
                 operatorId
         );
         recalculate(project, operatorId);
+        notifyProjectReviewResult(project, operatorId, previousStatus);
         auditLogService.record(operatorId, actor.getAccountType(), "PROJECT_REVIEW",
                 request.decision() == ReviewDtos.ReviewDecision.APPROVE
                         ? "APPROVE_PROJECT_FIELDS"
@@ -193,6 +209,7 @@ public class ProjectReviewService {
         requireAdmin(actor);
         WeddingProject project = getProject(projectId);
         requireVersion(project, request.version());
+        ReviewStatus previousStatus = project.getReviewStatus();
         reviewRevisionService.ensureProjectBaseline(project);
         List<ReviewItem> pending = currentFields(projectId).stream()
                 .filter(item -> ReviewItemStatus.PENDING == item.getStatus())
@@ -211,6 +228,7 @@ public class ProjectReviewService {
             throw new ApiException(HttpStatus.CONFLICT, "PROJECT_FIELDS_NOT_APPROVED",
                     "Every current project field must be approved");
         }
+        notifyProjectReviewResult(project, operatorId, previousStatus);
         auditLogService.record(operatorId, actor.getAccountType(), "PROJECT_REVIEW", "APPROVE_PROJECT",
                 "WEDDING_PROJECT", projectId, "Project fields approved", ipAddress);
         return detail(operatorId, projectId);
@@ -227,6 +245,7 @@ public class ProjectReviewService {
         requireAdmin(actor);
         WeddingProject project = getProject(projectId);
         requireVersion(project, request.version());
+        ReviewStatus previousStatus = project.getReviewStatus();
         reviewRevisionService.ensureProjectBaseline(project);
         reviewRevisionService.reviewAllPendingFields(
                 ReviewTargetType.PROJECT,
@@ -236,6 +255,7 @@ public class ProjectReviewService {
                 operatorId
         );
         recalculate(project, operatorId);
+        notifyProjectReviewResult(project, operatorId, previousStatus);
         auditLogService.record(operatorId, actor.getAccountType(), "PROJECT_REVIEW", "REJECT_PROJECT",
                 "WEDDING_PROJECT", projectId, request.reason().trim(), ipAddress);
         return detail(operatorId, projectId);
@@ -276,6 +296,14 @@ public class ProjectReviewService {
         project.setPublishedBy(operatorId);
         project.setOfflineReason(null);
         saveProject(project, operatorId);
+        notificationService.notifyProjectCreators(
+                projectId,
+                operatorId,
+                UserNotificationType.PROJECT_PUBLISHED,
+                "婚礼项目已发布",
+                "项目“" + project.getTitle() + "”已发布到官网。",
+                UserNotificationRelatedType.PROJECT
+        );
         auditLogService.record(operatorId, actor.getAccountType(), "PROJECT_PUBLICATION", "PUBLISH_PROJECT",
                 "WEDDING_PROJECT", projectId, "Project published as " + request.visibility(), ipAddress);
         return detail(operatorId, projectId);
@@ -299,6 +327,14 @@ public class ProjectReviewService {
         project.setPublishStatus(PublishStatus.OFFLINE);
         project.setOfflineReason(request.reason().trim());
         saveProject(project, operatorId);
+        notificationService.notifyProjectCreators(
+                projectId,
+                operatorId,
+                UserNotificationType.PROJECT_OFFLINE,
+                "婚礼项目已下架",
+                "项目“" + project.getTitle() + "”已从官网下架。原因：" + project.getOfflineReason(),
+                UserNotificationRelatedType.PROJECT
+        );
         auditLogService.record(operatorId, actor.getAccountType(), "PROJECT_PUBLICATION", "OFFLINE_PROJECT",
                 "WEDDING_PROJECT", projectId, request.reason().trim(), ipAddress);
         return detail(operatorId, projectId);
@@ -418,6 +454,36 @@ public class ProjectReviewService {
 
     private boolean isAdmin(SystemUser actor) {
         return "ADMIN".equals(actor.getAccountType());
+    }
+
+    private void notifyProjectReviewResult(
+            WeddingProject project,
+            Long operatorId,
+            ReviewStatus previousStatus
+    ) {
+        if (previousStatus == project.getReviewStatus()) {
+            return;
+        }
+        if (ReviewStatus.APPROVED == project.getReviewStatus()) {
+            notificationService.notifyProjectCreators(
+                    project.getId(),
+                    operatorId,
+                    UserNotificationType.PROJECT_REVIEW_APPROVED,
+                    "婚礼项目审核已通过",
+                    "项目“" + project.getTitle() + "”的审核已通过，可以继续发布或上架。",
+                    UserNotificationRelatedType.PROJECT_REVIEW
+            );
+        } else if (ReviewStatus.PARTIALLY_REJECTED == project.getReviewStatus()) {
+            notificationService.notifyProjectCreators(
+                    project.getId(),
+                    operatorId,
+                    UserNotificationType.PROJECT_REVIEW_REJECTED,
+                    "婚礼项目审核需要修改",
+                    "项目“" + project.getTitle() + "”的审核未完全通过。原因："
+                            + (project.getRejectionReason() == null ? "请查看审核详情" : project.getRejectionReason()),
+                    UserNotificationRelatedType.PROJECT_REVIEW
+            );
+        }
     }
 
     private String trimToNull(String value) {

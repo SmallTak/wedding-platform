@@ -39,8 +39,12 @@ public class AccountSetupFilter extends OncePerRequestFilter {
             FilterChain filterChain
     ) throws ServletException, IOException {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication instanceof JwtAuthenticationToken jwtAuthentication
-                && "CREATOR".equals(jwtAuthentication.getToken().getClaimAsString("accountType"))) {
+        if (authentication instanceof JwtAuthenticationToken jwtAuthentication) {
+            String accountType = jwtAuthentication.getToken().getClaimAsString("accountType");
+            if (!"CREATOR".equals(accountType) && !"CUSTOMER".equals(accountType)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
             Long userId = Long.valueOf(jwtAuthentication.getToken().getClaimAsString("uid"));
             SystemUser user = userRepository.findById(userId).orElse(null);
             if (user == null || !"ACTIVE".equals(user.getAccountStatus()) || Boolean.TRUE.equals(user.getDeleted())) {

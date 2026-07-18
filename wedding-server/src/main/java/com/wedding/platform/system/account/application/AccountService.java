@@ -4,10 +4,12 @@ import com.wedding.platform.platform.audit.AuditLogService;
 import com.wedding.platform.platform.security.JwtService;
 import com.wedding.platform.platform.web.ApiException;
 import com.wedding.platform.system.account.persistence.entity.CreatorProfile;
+import com.wedding.platform.system.account.persistence.entity.CustomerProfile;
 import com.wedding.platform.system.account.persistence.entity.ProfessionalRole;
 import com.wedding.platform.system.account.persistence.entity.SystemRole;
 import com.wedding.platform.system.account.persistence.entity.SystemUser;
 import com.wedding.platform.system.account.persistence.repository.CreatorProfileRepository;
+import com.wedding.platform.system.account.persistence.repository.CustomerProfileRepository;
 import com.wedding.platform.system.account.persistence.repository.PermissionRepository;
 import com.wedding.platform.system.account.persistence.repository.ProfessionalRoleRepository;
 import com.wedding.platform.system.account.persistence.repository.SystemRoleRepository;
@@ -32,6 +34,7 @@ public class AccountService {
     private final SystemRoleRepository roleRepository;
     private final ProfessionalRoleRepository professionalRoleRepository;
     private final CreatorProfileRepository creatorProfileRepository;
+    private final CustomerProfileRepository customerProfileRepository;
     private final PermissionRepository permissionRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
@@ -42,6 +45,7 @@ public class AccountService {
             SystemRoleRepository roleRepository,
             ProfessionalRoleRepository professionalRoleRepository,
             CreatorProfileRepository creatorProfileRepository,
+            CustomerProfileRepository customerProfileRepository,
             PermissionRepository permissionRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
@@ -51,6 +55,7 @@ public class AccountService {
         this.roleRepository = roleRepository;
         this.professionalRoleRepository = professionalRoleRepository;
         this.creatorProfileRepository = creatorProfileRepository;
+        this.customerProfileRepository = customerProfileRepository;
         this.permissionRepository = permissionRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -75,6 +80,51 @@ public class AccountService {
         List<String> permissions = permissions(user.getId());
         JwtService.IssuedToken token = jwtService.issue(user, permissions);
         auditLogService.record(user.getId(), user.getAccountType(), "ACCOUNT", "LOGIN", "SYS_USER", user.getId(), "Login succeeded", ipAddress);
+        return new AccountDtos.LoginResponse(token.value(), token.expiresAt(), toResponse(user, permissions));
+    }
+
+    @Transactional
+    public AccountDtos.LoginResponse registerCustomer(
+            AccountDtos.RegisterCustomerRequest request,
+            String ipAddress
+    ) {
+        if (userRepository.existsByMobile(request.mobile())) {
+            throw new ApiException(HttpStatus.CONFLICT, "MOBILE_EXISTS",
+                    "This mobile number is already registered");
+        }
+        SystemRole customerRole = roleRepository.findByCodeAndStatus("CUSTOMER", "ACTIVE")
+                .orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "ROLE_MISSING",
+                        "Customer role is not configured"));
+
+        SystemUser user = new SystemUser();
+        user.setMobile(request.mobile());
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+        user.setDisplayName(request.nickname().trim());
+        user.setAccountType("CUSTOMER");
+        user.setAccountStatus("ACTIVE");
+        user.setMustChangePassword(false);
+        user.setProfileCompleted(true);
+        user.setDeleted(false);
+        user.setRoles(new HashSet<>(Set.of(customerRole)));
+        user = userRepository.saveAndFlush(user);
+
+        CustomerProfile profile = new CustomerProfile();
+        profile.setUserId(user.getId());
+        profile.setNickname(request.nickname().trim());
+        customerProfileRepository.save(profile);
+
+        List<String> permissions = permissions(user.getId());
+        JwtService.IssuedToken token = jwtService.issue(user, permissions);
+        auditLogService.record(
+                user.getId(),
+                user.getAccountType(),
+                "ACCOUNT",
+                "REGISTER_CUSTOMER",
+                "SYS_USER",
+                user.getId(),
+                "Customer account registered",
+                ipAddress
+        );
         return new AccountDtos.LoginResponse(token.value(), token.expiresAt(), toResponse(user, permissions));
     }
 
@@ -123,9 +173,52 @@ public class AccountService {
         return toResponse(user, permissions(userId));
     }
 
+    @Transactional
+    public AccountDtos.AccountResponse updateCustomerProfile(
+            Long userId,
+            AccountDtos.UpdateCustomerProfileRequest request
+    ) {
+        SystemUser user = getUser(userId);
+        if (!"CUSTOMER".equals(user.getAccountType())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "CUSTOMER_ACCOUNT_REQUIRED",
+                    "Only customer accounts can update customer profiles");
+        }
+        String nickname = request.nickname().trim();
+        user.setDisplayName(nickname);
+        user.setProfileCompleted(true);
+        userRepository.saveAndFlush(user);
+
+        CustomerProfile profile = customerProfileRepository.findById(userId).orElseGet(() -> {
+            CustomerProfile created = new CustomerProfile();
+            created.setUserId(userId);
+            return created;
+        });
+        profile.setNickname(nickname);
+        customerProfileRepository.save(profile);
+
+        auditLogService.record(
+                userId,
+                user.getAccountType(),
+                "ACCOUNT",
+                "UPDATE_CUSTOMER_PROFILE",
+                "SYS_USER",
+                userId,
+                "Customer profile updated",
+                null
+        );
+        return toResponse(user, permissions(userId));
+    }
+
     @Transactional(readOnly = true)
     public List<AccountDtos.AccountResponse> listCreators() {
         return userRepository.findAllByAccountTypeAndDeletedFalseOrderByCreatedAtDesc("CREATOR").stream()
+                .map(user -> toResponse(user, permissions(user.getId())))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<AccountDtos.AccountResponse> listCustomers() {
+        return userRepository.findAllByAccountTypeAndDeletedFalseOrderByCreatedAtDesc("CUSTOMER").stream()
                 .map(user -> toResponse(user, permissions(user.getId())))
                 .toList();
     }
@@ -183,6 +276,37 @@ public class AccountService {
     }
 
     @Transactional
+    public AccountDtos.AccountResponse updateCustomerStatus(
+            Long operatorId,
+            Long customerId,
+            String status,
+            String ipAddress
+    ) {
+        SystemUser user = getCustomer(customerId);
+        user.setAccountStatus(status);
+        userRepository.saveAndFlush(user);
+        auditLogService.record(operatorId, "ADMIN", "ACCOUNT", "UPDATE_CUSTOMER_STATUS",
+                "SYS_USER", customerId, status, ipAddress);
+        return toResponse(user, permissions(customerId));
+    }
+
+    @Transactional
+    public AccountDtos.AccountResponse resetCustomerPassword(
+            Long operatorId,
+            Long customerId,
+            String password,
+            String ipAddress
+    ) {
+        SystemUser user = getCustomer(customerId);
+        user.setPasswordHash(passwordEncoder.encode(password));
+        user.setMustChangePassword(true);
+        userRepository.saveAndFlush(user);
+        auditLogService.record(operatorId, "ADMIN", "ACCOUNT", "RESET_CUSTOMER_PASSWORD",
+                "SYS_USER", customerId, "Customer password reset; change required at next login", ipAddress);
+        return toResponse(user, permissions(customerId));
+    }
+
+    @Transactional
     public void deleteCreator(
             Long operatorId,
             Long creatorId,
@@ -224,6 +348,15 @@ public class AccountService {
         return user;
     }
 
+    private SystemUser getCustomer(Long userId) {
+        SystemUser user = getUser(userId);
+        if (!"CUSTOMER".equals(user.getAccountType())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "NOT_CUSTOMER",
+                    "The selected account is not a customer");
+        }
+        return user;
+    }
+
     private List<String> permissions(Long userId) {
         return permissionRepository.findResourcesByUserId(userId);
     }
@@ -231,6 +364,9 @@ public class AccountService {
     private AccountDtos.AccountResponse toResponse(SystemUser user, List<String> permissions) {
         CreatorProfile profile = "CREATOR".equals(user.getAccountType())
                 ? creatorProfileRepository.findById(user.getId()).orElse(null)
+                : null;
+        CustomerProfile customerProfile = "CUSTOMER".equals(user.getAccountType())
+                ? customerProfileRepository.findById(user.getId()).orElse(null)
                 : null;
         List<String> roles = user.getRoles().stream().map(SystemRole::getCode).sorted().toList();
         List<AccountDtos.ProfessionalRoleResponse> professionalRoles = user.getProfessionalRoles().stream()
@@ -243,6 +379,7 @@ public class AccountService {
                 user.getId(),
                 user.getMobile(),
                 user.getDisplayName(),
+                customerProfile == null ? null : customerProfile.getNickname(),
                 user.getAvatarPath(),
                 user.getAccountType(),
                 user.getAccountStatus(),

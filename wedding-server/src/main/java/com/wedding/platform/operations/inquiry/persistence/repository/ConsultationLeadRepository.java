@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
+import java.time.Instant;
+import java.util.List;
 
 public interface ConsultationLeadRepository extends JpaRepository<ConsultationLead, Long> {
 
@@ -45,4 +47,9 @@ public interface ConsultationLeadRepository extends JpaRepository<ConsultationLe
     );
 
     long countByDeletedFalseAndFollowStatus(InquiryFollowStatus followStatus);
+
+    List<ConsultationLead> findAllByDeletedFalseAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+            Instant startAt,
+            Instant endAt
+    );
 }

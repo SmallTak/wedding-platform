@@ -34,6 +34,7 @@ async function loadProject() {
   try {
     const { data } = await publicApi.project(route.params.projectId)
     detail.value = data
+    publicApi.trackVisit('PROJECT', data.project.id).catch(() => {})
   } catch (error) {
     if (error.response?.status === 401 && error.response?.data?.code === 'CONTENT_ACCESS_REQUIRED') {
       accessRequired.value = true

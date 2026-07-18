@@ -28,10 +28,22 @@ const router = createRouter({
           meta: { title: '运营工作台', permission: '/dashboard' },
         },
         {
+          path: 'notifications',
+          name: 'notifications',
+          component: () => import('../views/NotificationsView.vue'),
+          meta: { title: '站内消息', permission: '/notifications' },
+        },
+        {
           path: 'creators',
           name: 'creators',
           component: () => import('../views/CreatorAccountsView.vue'),
           meta: { title: '创作者账号', permission: '/accounts/creators' },
+        },
+        {
+          path: 'customers',
+          name: 'customers',
+          component: () => import('../views/CustomerAccountsView.vue'),
+          meta: { title: '客户账号', permission: '/accounts/customers' },
         },
         {
           path: 'projects',
@@ -80,6 +92,12 @@ const router = createRouter({
           name: 'site-home',
           component: () => import('../views/SiteHomeView.vue'),
           meta: { title: '首页运营', permission: '/site/home' },
+        },
+        {
+          path: 'analytics',
+          name: 'analytics',
+          component: () => import('../views/AnalyticsView.vue'),
+          meta: { title: '数据统计', permission: '/analytics' },
         },
       ],
     },

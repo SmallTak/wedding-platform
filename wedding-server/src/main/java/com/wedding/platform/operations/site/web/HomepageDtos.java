@@ -12,6 +12,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 public final class HomepageDtos {
@@ -58,8 +59,8 @@ public final class HomepageDtos {
     }
 
     public record CarouselItemRequest(
-            @NotNull(message = "Photo id is required")
-            Long photoId,
+            @NotNull(message = "Collection id is required")
+            Long collectionId,
             @NotNull(message = "Sort order is required")
             @PositiveOrZero(message = "Sort order must not be negative")
             Integer sortOrder,
@@ -76,28 +77,31 @@ public final class HomepageDtos {
 
     public record ReplaceCarouselRequest(
             @NotNull(message = "Carousel items are required")
-            @Size(max = 5, message = "Homepage carousel cannot contain more than 5 images")
+            @Size(max = 5, message = "Homepage carousel cannot contain more than 5 collections")
             List<@Valid CarouselItemRequest> items
     ) {
     }
 
     public record CarouselCandidate(
-            Long photoId,
             Long collectionId,
             String collectionTitle,
+            String description,
+            LocalDate eventDate,
+            String locationText,
             String previewUrl,
             String thumbnailUrl,
             Integer width,
-            Integer height,
-            Integer photoSortOrder
+            Integer height
     ) {
     }
 
     public record CarouselItem(
             Long id,
-            Long photoId,
             Long collectionId,
             String collectionTitle,
+            String description,
+            LocalDate eventDate,
+            String locationText,
             String previewUrl,
             String thumbnailUrl,
             Integer width,
@@ -118,9 +122,11 @@ public final class HomepageDtos {
     }
 
     public record CarouselSlide(
-            Long photoId,
             Long collectionId,
             String collectionTitle,
+            String description,
+            LocalDate eventDate,
+            String locationText,
             String previewUrl,
             String thumbnailUrl,
             Integer width,

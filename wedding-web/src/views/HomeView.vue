@@ -1,6 +1,17 @@
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
-import { ArrowUpRight, CalendarDays, Menu, Search, Send, Star, X } from '@lucide/vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import {
+  ArrowUpRight,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Menu,
+  Search,
+  Send,
+  Star,
+  UserRound,
+  X,
+} from '@lucide/vue'
 import heroImage from '../assets/wedding-hero.png'
 import { publicApi } from '../api/public'
 import BrandLogo from '../components/BrandLogo.vue'
@@ -14,7 +25,10 @@ const categories = ref([])
 const collections = ref([])
 const projects = ref([])
 const feedback = ref([])
+const carousel = ref([])
+const currentWorkIndex = ref(0)
 const keyword = ref('')
+const appliedKeyword = ref('')
 const selectedCategoryId = ref(null)
 const inquirySubmitting = ref(false)
 const inquiryError = ref('')
@@ -29,13 +43,15 @@ const inquiryForm = reactive({
   website: '',
 })
 
-const heroBackground = computed(() => (
-  collections.value[0]?.coverPreviewUrl
-  || projects.value[0]?.coverPreviewUrl
-  || heroImage
-))
+let workTimer = null
+let workPaused = false
+const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+const workSlides = computed(() => carousel.value)
+const isFilteringWorks = computed(() =>
+  Boolean(appliedKeyword.value) || selectedCategoryId.value !== null,
+)
 const resultTitle = computed(() => {
-  if (keyword.value.trim()) return `“${keyword.value.trim()}”的作品`
+  if (appliedKeyword.value) return `“${appliedKeyword.value}”的作品`
   const category = categories.value.find((item) => item.id === selectedCategoryId.value)
   return category ? category.name : '最新作品'
 })
@@ -43,6 +59,19 @@ const resultTitle = computed(() => {
 onMounted(async () => {
   await Promise.all([loadStatus(), loadCategories(), loadHomepage()])
 })
+onBeforeUnmount(stopWorkRotation)
+
+watch(
+  [() => workSlides.value.length, isFilteringWorks],
+  ([slideCount, filtering]) => {
+    if (currentWorkIndex.value >= slideCount) currentWorkIndex.value = 0
+    if (filtering) {
+      stopWorkRotation()
+    } else {
+      startWorkRotation()
+    }
+  },
+)
 
 async function loadStatus() {
   try {
@@ -70,14 +99,47 @@ async function loadHomepage() {
     projects.value = data.projects
     collections.value = data.collections
     feedback.value = data.feedback
+    carousel.value = data.carousel || []
+    startWorkRotation()
   } catch {
     projects.value = []
     collections.value = []
     feedback.value = []
+    carousel.value = []
     loadError.value = '首页内容暂时无法加载，请稍后再试。'
   } finally {
     loading.value = false
   }
+}
+
+function startWorkRotation() {
+  stopWorkRotation()
+  if (workPaused || reduceMotion || isFilteringWorks.value || workSlides.value.length < 2) return
+  workTimer = window.setInterval(() => {
+    currentWorkIndex.value = (currentWorkIndex.value + 1) % workSlides.value.length
+  }, 6500)
+}
+
+function stopWorkRotation() {
+  if (workTimer !== null) {
+    window.clearInterval(workTimer)
+    workTimer = null
+  }
+}
+
+function pauseWorkRotation() {
+  workPaused = true
+  stopWorkRotation()
+}
+
+function resumeWorkRotation() {
+  workPaused = false
+  startWorkRotation()
+}
+
+function showWorkSlide(index) {
+  currentWorkIndex.value = (index + workSlides.value.length) % workSlides.value.length
+  startWorkRotation()
 }
 
 async function loadCollections() {
@@ -87,7 +149,7 @@ async function loadCollections() {
     const { data } = await publicApi.collections({
       page: 0,
       size: 12,
-      keyword: keyword.value.trim() || undefined,
+      keyword: appliedKeyword.value || undefined,
       categoryId: selectedCategoryId.value || undefined,
     })
     collections.value = data.content
@@ -104,6 +166,11 @@ async function loadCollections() {
 async function searchCollections() {
   searchOpen.value = false
   selectedCategoryId.value = null
+  if (!keyword.value.trim()) {
+    await clearFilters()
+    return
+  }
+  appliedKeyword.value = keyword.value.trim()
   await loadCollections()
   await nextTick()
   document.querySelector('#works')?.scrollIntoView({ behavior: 'smooth' })
@@ -111,14 +178,20 @@ async function searchCollections() {
 
 async function selectCategory(categoryId) {
   keyword.value = ''
+  appliedKeyword.value = ''
   selectedCategoryId.value = selectedCategoryId.value === categoryId ? null : categoryId
-  await loadCollections()
+  if (selectedCategoryId.value === null) {
+    await loadHomepage()
+  } else {
+    await loadCollections()
+  }
   await nextTick()
   document.querySelector('#works')?.scrollIntoView({ behavior: 'smooth' })
 }
 
 async function clearFilters() {
   keyword.value = ''
+  appliedKeyword.value = ''
   selectedCategoryId.value = null
   await loadHomepage()
 }
@@ -186,6 +259,14 @@ function formatDate(value) {
       </nav>
 
       <div class="header-actions">
+        <RouterLink
+          class="icon-button"
+          :to="{ name: 'customer-projects' }"
+          aria-label="客户中心"
+          title="客户中心"
+        >
+          <UserRound :size="18" />
+        </RouterLink>
         <button
           class="icon-button"
           type="button"
@@ -217,7 +298,10 @@ function formatDate(value) {
     </form>
 
     <main>
-      <section class="hero-section" :style="{ backgroundImage: `url(${heroBackground})` }">
+      <section
+        class="hero-section"
+        :style="{ backgroundImage: `url(${heroImage})` }"
+      >
         <div class="hero-overlay"></div>
         <div class="hero-content">
           <p class="eyebrow">TANGSHI AESTHETICS · 2026</p>
@@ -262,14 +346,18 @@ function formatDate(value) {
         </div>
       </section>
 
-      <section id="works" class="content-section featured-section">
+      <section
+        v-if="loading || loadError || isFilteringWorks || workSlides.length"
+        id="works"
+        class="content-section featured-section"
+      >
         <div class="section-heading">
           <div>
             <p class="section-kicker">Published work</p>
             <h2>{{ resultTitle }}</h2>
           </div>
           <button
-            v-if="selectedCategoryId || keyword"
+            v-if="isFilteringWorks"
             class="text-button"
             type="button"
             @click="clearFilters"
@@ -278,7 +366,7 @@ function formatDate(value) {
 
         <div v-if="loading" class="public-loading">正在加载作品...</div>
         <p v-else-if="loadError" class="public-error">{{ loadError }}</p>
-        <div v-else-if="collections.length" class="work-grid">
+        <div v-else-if="isFilteringWorks && collections.length" class="work-grid">
           <RouterLink
             v-for="work in collections"
             :key="work.id"
@@ -298,9 +386,60 @@ function formatDate(value) {
             </div>
           </RouterLink>
         </div>
-        <div v-else class="public-empty">
+        <div v-else-if="isFilteringWorks" class="public-empty">
           <h3>暂无已发布作品</h3>
           <p>新的婚礼故事将在审核并发布后出现在这里。</p>
+        </div>
+        <div
+          v-else-if="workSlides.length"
+          class="work-carousel"
+          @mouseenter="pauseWorkRotation"
+          @mouseleave="resumeWorkRotation"
+          @focusin="pauseWorkRotation"
+          @focusout="resumeWorkRotation"
+        >
+          <RouterLink
+            v-for="(slide, index) in workSlides"
+            :key="slide.collectionId"
+            :to="{ name: 'collection-detail', params: { collectionId: slide.collectionId } }"
+            :class="['work-carousel-slide', { active: index === currentWorkIndex }]"
+            :aria-hidden="index === currentWorkIndex ? undefined : 'true'"
+            :tabindex="index === currentWorkIndex ? undefined : -1"
+            :style="{
+              backgroundImage: `url(${slide.previewUrl})`,
+              backgroundPosition: `${Number(slide.focalX ?? 50)}% ${Number(slide.focalY ?? 50)}%`,
+            }"
+          >
+            <div class="work-carousel-overlay"></div>
+            <div class="work-carousel-copy">
+              <p v-if="slide.locationText || slide.eventDate">
+                <span v-if="slide.locationText">{{ slide.locationText }}</span>
+                <span v-if="slide.eventDate">{{ formatDate(slide.eventDate) }}</span>
+              </p>
+              <h3>{{ slide.collectionTitle }}</h3>
+              <div v-if="slide.description">{{ slide.description }}</div>
+              <strong>查看完整作品 <ArrowUpRight :size="17" /></strong>
+            </div>
+          </RouterLink>
+          <div v-if="workSlides.length > 1" class="work-carousel-controls" aria-label="作品轮播控制">
+            <button type="button" aria-label="上一个作品" title="上一个作品" @click="showWorkSlide(currentWorkIndex - 1)">
+              <ChevronLeft :size="19" />
+            </button>
+            <div class="work-carousel-dots">
+              <button
+                v-for="(slide, index) in workSlides"
+                :key="slide.collectionId"
+                type="button"
+                :class="{ active: index === currentWorkIndex }"
+                :aria-label="`显示第 ${index + 1} 个作品`"
+                :aria-current="index === currentWorkIndex ? 'true' : undefined"
+                @click="showWorkSlide(index)"
+              ></button>
+            </div>
+            <button type="button" aria-label="下一个作品" title="下一个作品" @click="showWorkSlide(currentWorkIndex + 1)">
+              <ChevronRight :size="19" />
+            </button>
+          </div>
         </div>
       </section>
 

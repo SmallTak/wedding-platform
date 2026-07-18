@@ -24,6 +24,19 @@ public final class AccountDtos {
     public record LoginResponse(String accessToken, Instant expiresAt, AccountResponse user) {
     }
 
+    public record RegisterCustomerRequest(
+            @NotBlank(message = "Mobile is required")
+            @Pattern(regexp = "^1\\d{10}$", message = "Mobile must be an 11-digit mainland China number")
+            String mobile,
+            @NotBlank(message = "Password is required")
+            @Size(min = 8, max = 72, message = "Password must contain 8 to 72 characters")
+            String password,
+            @NotBlank(message = "Nickname is required")
+            @Size(max = 100, message = "Nickname is too long")
+            String nickname
+    ) {
+    }
+
     public record ChangePasswordRequest(
             @NotBlank(message = "Current password is required") String currentPassword,
             @NotBlank(message = "New password is required")
@@ -44,6 +57,13 @@ public final class AccountDtos {
             String positionText,
             @Size(max = 300, message = "Service area is too long") String serviceArea,
             @Size(max = 1000, message = "Introduction is too long") String introduction
+    ) {
+    }
+
+    public record UpdateCustomerProfileRequest(
+            @NotBlank(message = "Nickname is required")
+            @Size(max = 100, message = "Nickname is too long")
+            String nickname
     ) {
     }
 
@@ -79,6 +99,7 @@ public final class AccountDtos {
             Long id,
             String mobile,
             String displayName,
+            String nickname,
             String avatarPath,
             String accountType,
             String accountStatus,

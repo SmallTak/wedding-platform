@@ -1,6 +1,14 @@
 package com.wedding.platform.operations.web;
 
 import com.jayway.jsonpath.JsonPath;
+import com.wedding.platform.content.collection.persistence.entity.ContentCategory;
+import com.wedding.platform.content.collection.persistence.entity.WorkCollection;
+import com.wedding.platform.content.collection.persistence.repository.ContentCategoryRepository;
+import com.wedding.platform.content.collection.persistence.repository.WorkCollectionRepository;
+import com.wedding.platform.content.media.persistence.entity.CollectionPhoto;
+import com.wedding.platform.content.media.persistence.entity.MediaAsset;
+import com.wedding.platform.content.media.persistence.repository.CollectionPhotoRepository;
+import com.wedding.platform.content.media.persistence.repository.MediaAssetRepository;
 import com.wedding.platform.content.project.persistence.entity.ProjectCreator;
 import com.wedding.platform.content.project.persistence.entity.ProjectCreatorId;
 import com.wedding.platform.content.project.persistence.entity.WeddingProject;
@@ -9,6 +17,7 @@ import com.wedding.platform.content.project.persistence.repository.WeddingProjec
 import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
 import com.wedding.platform.content.shared.ReviewStatus;
+import com.wedding.platform.operations.site.persistence.repository.HomepageCarouselItemRepository;
 import com.wedding.platform.operations.site.persistence.repository.HomepageFeatureRepository;
 import com.wedding.platform.operations.inquiry.persistence.repository.ConsultationLeadRepository;
 import com.wedding.platform.system.account.persistence.entity.SystemRole;
@@ -63,7 +72,22 @@ class OperationsFlowTests {
     private ProjectCreatorRepository projectCreatorRepository;
 
     @Autowired
+    private ContentCategoryRepository categoryRepository;
+
+    @Autowired
+    private WorkCollectionRepository collectionRepository;
+
+    @Autowired
+    private MediaAssetRepository assetRepository;
+
+    @Autowired
+    private CollectionPhotoRepository photoRepository;
+
+    @Autowired
     private HomepageFeatureRepository homepageFeatureRepository;
+
+    @Autowired
+    private HomepageCarouselItemRepository homepageCarouselItemRepository;
 
     @Autowired
     private ConsultationLeadRepository consultationLeadRepository;
@@ -365,6 +389,117 @@ class OperationsFlowTests {
                 .andExpect(jsonPath("$.code").value("INQUIRY_RATE_LIMITED"));
     }
 
+    @Test
+    void homepageCarouselUsesPublishedPublicCollectionsWithValidCovers() throws Exception {
+        String adminToken = login(ADMIN_MOBILE);
+        String creatorToken = login(CREATOR_MOBILE);
+        CarouselFixture fixture = ensureCarouselFixture();
+
+        mockMvc.perform(get("/api/admin/site/home/carousel")
+                        .header("Authorization", bearer(creatorToken)))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/admin/site/home/carousel")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.candidates[?(@.collectionId == %d)]"
+                        .formatted(fixture.collection().getId())).exists())
+                .andExpect(jsonPath("$.candidates[?(@.collectionId == %d)].locationText"
+                        .formatted(fixture.collection().getId())).value("杭州"));
+
+        mockMvc.perform(put("/api/admin/site/home")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "items": [
+                                    {"targetType":"COLLECTION","targetId":%d,"sortOrder":10,"pinned":false}
+                                  ]
+                                }
+                                """.formatted(fixture.collection().getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("HOMEPAGE_FEATURE_TARGET_INVALID"));
+
+        mockMvc.perform(put("/api/admin/site/home/carousel")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "items": [
+                                    {"collectionId":%d,"sortOrder":10,"focalX":25.5,"focalY":60},
+                                    {"collectionId":%d,"sortOrder":20,"focalX":50,"focalY":50}
+                                  ]
+                                }
+                                """.formatted(fixture.collection().getId(), fixture.collection().getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("HOMEPAGE_CAROUSEL_DUPLICATE"));
+
+        mockMvc.perform(put("/api/admin/site/home/carousel")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "items": [
+                                    {"collectionId":%d,"sortOrder":10,"focalX":25.5,"focalY":60}
+                                  ]
+                                }
+                                """.formatted(fixture.collection().getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].collectionId").value(fixture.collection().getId()))
+                .andExpect(jsonPath("$.items[0].focalX").value(25.5))
+                .andExpect(jsonPath("$.items[0].focalY").value(60))
+                .andExpect(jsonPath("$.items[0].valid").value(true));
+
+        mockMvc.perform(get("/api/public/home"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.carousel.length()").value(1))
+                .andExpect(jsonPath("$.carousel[0].collectionId").value(fixture.collection().getId()))
+                .andExpect(jsonPath("$.carousel[0].collectionTitle").value("Operations Carousel Collection"))
+                .andExpect(jsonPath("$.carousel[0].description")
+                        .value("Homepage carousel integration test collection"))
+                .andExpect(jsonPath("$.carousel[0].eventDate").value("2026-10-18"))
+                .andExpect(jsonPath("$.carousel[0].locationText").value("杭州"))
+                .andExpect(jsonPath("$.carousel[0].previewUrl").value("/media/previews/operations-carousel.jpg"));
+
+        fixture.collection().setVisibility(ContentVisibility.HIDDEN);
+        collectionRepository.saveAndFlush(fixture.collection());
+
+        mockMvc.perform(get("/api/public/home"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.carousel.length()").value(0));
+
+        mockMvc.perform(get("/api/admin/site/home/carousel")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].valid").value(false))
+                .andExpect(jsonPath("$.items[0].invalidReason").value("COLLECTION_NOT_PUBLIC"));
+
+        WorkCollection restoredCollection = collectionRepository.findById(fixture.collection().getId()).orElseThrow();
+        restoredCollection.setVisibility(ContentVisibility.PUBLIC);
+        collectionRepository.saveAndFlush(restoredCollection);
+
+        restoredCollection = collectionRepository.findById(fixture.collection().getId()).orElseThrow();
+        restoredCollection.setCoverPhotoId(null);
+        collectionRepository.saveAndFlush(restoredCollection);
+
+        mockMvc.perform(get("/api/public/home"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.carousel.length()").value(0));
+
+        mockMvc.perform(get("/api/admin/site/home/carousel")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.candidates[?(@.collectionId == %d)]"
+                        .formatted(fixture.collection().getId())).doesNotExist())
+                .andExpect(jsonPath("$.items[0].invalidReason").value("COLLECTION_COVER_REQUIRED"));
+
+        restoredCollection = collectionRepository.findById(fixture.collection().getId()).orElseThrow();
+        restoredCollection.setCoverPhotoId(fixture.photo().getId());
+        collectionRepository.saveAndFlush(restoredCollection);
+        org.junit.jupiter.api.Assertions.assertEquals(1, homepageCarouselItemRepository.count());
+    }
+
     private String feedbackRequest(Long projectId, Long creatorId, Long version, String content) {
         String versionField = version == null ? "" : "\"version\":" + version + ",";
         return """
@@ -409,6 +544,89 @@ class OperationsFlowTests {
                 });
     }
 
+    private CarouselFixture ensureCarouselFixture() {
+        ContentCategory category = categoryRepository.findAllByDeletedFalseOrderBySortOrderAscCreatedAtAsc().stream()
+                .filter(item -> "Operations Carousel Category".equals(item.getName()))
+                .findFirst()
+                .orElseGet(() -> {
+                    ContentCategory created = new ContentCategory();
+                    created.setName("Operations Carousel Category");
+                    created.setDescription("Homepage carousel integration test");
+                    created.setSortOrder(900);
+                    created.setStatus("ACTIVE");
+                    created.setCreatedBy(admin.getId());
+                    created.setUpdatedBy(admin.getId());
+                    return categoryRepository.saveAndFlush(created);
+                });
+
+        WorkCollection collection = collectionRepository.findAll().stream()
+                .filter(item -> "Operations Carousel Collection".equals(item.getTitle()))
+                .findFirst()
+                .orElseGet(WorkCollection::new);
+        collection.setTitle("Operations Carousel Collection");
+        collection.setDescription("Homepage carousel integration test collection");
+        collection.setProjectId(project.getId());
+        collection.setCategoryId(category.getId());
+        collection.setVisibility(ContentVisibility.PUBLIC);
+        collection.setReviewStatus(ReviewStatus.APPROVED);
+        collection.setPublishStatus(PublishStatus.PUBLISHED);
+        collection.setPublishedAt(Instant.now());
+        collection.setPublishedBy(admin.getId());
+        collection.setSortOrder(0);
+        collection.setFeatured(false);
+        collection.setPinned(false);
+        if (collection.getCreatedBy() == null) {
+            collection.setCreatedBy(creator.getId());
+        }
+        collection.setUpdatedBy(creator.getId());
+        collection = collectionRepository.saveAndFlush(collection);
+
+        MediaAsset asset = assetRepository.findAll().stream()
+                .filter(item -> "operations-carousel.jpg".equals(item.getStorageName()))
+                .findFirst()
+                .orElseGet(MediaAsset::new);
+        asset.setOriginalName("operations-carousel.jpg");
+        asset.setStorageName("operations-carousel.jpg");
+        asset.setMimeType("image/jpeg");
+        asset.setFileSize(1024L);
+        asset.setWidth(1600);
+        asset.setHeight(1067);
+        asset.setOriginalPath("originals/operations-carousel.jpg");
+        asset.setPreviewPath("previews/operations-carousel.jpg");
+        asset.setThumbnailPath("thumbnails/operations-carousel.jpg");
+        asset.setChecksum("a".repeat(64));
+        asset.setProcessStatus("SUCCESS");
+        if (asset.getCreatedBy() == null) {
+            asset.setCreatedBy(creator.getId());
+        }
+        asset.setUpdatedBy(creator.getId());
+        asset = assetRepository.saveAndFlush(asset);
+
+        Long collectionId = collection.getId();
+        Long assetId = asset.getId();
+        CollectionPhoto photo = photoRepository.findAll().stream()
+                .filter(item -> assetId.equals(item.getAssetId()))
+                .findFirst()
+                .orElseGet(CollectionPhoto::new);
+        photo.setCollectionId(collectionId);
+        photo.setAssetId(assetId);
+        photo.setSortOrder(0);
+        photo.setReviewStatus(ReviewStatus.APPROVED);
+        photo.setReviewedAt(Instant.now());
+        photo.setReviewedBy(admin.getId());
+        if (photo.getCreatedBy() == null) {
+            photo.setCreatedBy(creator.getId());
+        }
+        photo.setUpdatedBy(creator.getId());
+        photo = photoRepository.saveAndFlush(photo);
+
+        collection = collectionRepository.findById(collectionId).orElseThrow();
+        collection.setCoverPhotoId(photo.getId());
+        collection.setUpdatedBy(creator.getId());
+        collection = collectionRepository.saveAndFlush(collection);
+        return new CarouselFixture(collection, photo);
+    }
+
     private SystemUser ensureAccount(String mobile, String roleCode, String displayName) {
         return userRepository.findByMobileAndDeletedFalse(mobile).orElseGet(() -> {
             SystemRole role = roleRepository.findByCodeAndStatus(roleCode, "ACTIVE").orElseThrow();
@@ -437,5 +655,8 @@ class OperationsFlowTests {
 
     private String bearer(String token) {
         return "Bearer " + token;
+    }
+
+    private record CarouselFixture(WorkCollection collection, CollectionPhoto photo) {
     }
 }

@@ -53,8 +53,10 @@ const errorMessages = {
   FEEDBACK_REPLY_PUBLISHED_LOCKED: '已通过的公开回复不能继续编辑',
   INQUIRY_VERSION_CONFLICT: '咨询线索已被其他人更新，请刷新后重试',
   HOMEPAGE_FEATURE_TARGET_INVALID: '首页推荐只能选择当前公开发布的内容',
-  HOMEPAGE_FEATURE_LIMIT: '首页最多推荐 6 个项目、12 个作品集和 6 条评价',
+  HOMEPAGE_FEATURE_LIMIT: '首页最多推荐 6 个项目和 6 条评价',
   HOMEPAGE_FEATURE_DUPLICATE: '同一内容不能重复加入首页推荐',
+  HOMEPAGE_CAROUSEL_TARGET_INVALID: '轮播只能选择已审核、公开发布且设置了有效封面的作品',
+  HOMEPAGE_CAROUSEL_DUPLICATE: '同一个作品不能重复加入首页轮播',
   VERSION_CONFLICT: '数据已被其他人修改，请刷新后重试',
   VALIDATION_ERROR: '提交内容不完整或格式不正确',
 }

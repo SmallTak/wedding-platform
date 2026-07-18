@@ -31,7 +31,9 @@ async function submit() {
     await router.replace(destination)
   } catch (error) {
     const status = error.response?.status
-    if (status === 401) {
+    if (error.code === 'CUSTOMER_CONSOLE_ACCESS_DENIED') {
+      errorMessage.value = '客户账号请从官网客户中心登录'
+    } else if (status === 401) {
       errorMessage.value = '手机号或密码不正确'
     } else if (status === 403) {
       errorMessage.value = '当前账号已停用或无权访问工作台'

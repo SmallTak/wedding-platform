@@ -6,6 +6,8 @@ import com.wedding.platform.content.media.persistence.entity.CollectionPhoto;
 import com.wedding.platform.content.media.persistence.entity.MediaAsset;
 import com.wedding.platform.content.media.persistence.repository.CollectionPhotoRepository;
 import com.wedding.platform.content.media.persistence.repository.MediaAssetRepository;
+import com.wedding.platform.content.project.persistence.entity.WeddingProject;
+import com.wedding.platform.content.project.persistence.repository.WeddingProjectRepository;
 import com.wedding.platform.content.publication.application.PublicCollectionService;
 import com.wedding.platform.content.publication.application.PublicProjectService;
 import com.wedding.platform.content.publication.web.PublicCollectionDtos;
@@ -30,10 +32,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -44,7 +43,6 @@ import java.util.Set;
 public class HomepageService {
 
     private static final int PROJECT_LIMIT = 6;
-    private static final int COLLECTION_LIMIT = 12;
     private static final int FEEDBACK_LIMIT = 6;
     private static final int CAROUSEL_LIMIT = 5;
     private static final int CAROUSEL_CANDIDATE_LIMIT = 300;
@@ -56,6 +54,7 @@ public class HomepageService {
     private final CollectionPhotoRepository photoRepository;
     private final MediaAssetRepository assetRepository;
     private final WorkCollectionRepository workCollectionRepository;
+    private final WeddingProjectRepository projectRepository;
     private final PublicProjectService projectService;
     private final PublicCollectionService collectionService;
     private final PublicFeedbackService feedbackService;
@@ -68,6 +67,7 @@ public class HomepageService {
             CollectionPhotoRepository photoRepository,
             MediaAssetRepository assetRepository,
             WorkCollectionRepository workCollectionRepository,
+            WeddingProjectRepository projectRepository,
             PublicProjectService projectService,
             PublicCollectionService collectionService,
             PublicFeedbackService feedbackService,
@@ -79,6 +79,7 @@ public class HomepageService {
         this.photoRepository = photoRepository;
         this.assetRepository = assetRepository;
         this.workCollectionRepository = workCollectionRepository;
+        this.projectRepository = projectRepository;
         this.projectService = projectService;
         this.collectionService = collectionService;
         this.feedbackService = feedbackService;
@@ -92,10 +93,7 @@ public class HomepageService {
         if (projects.isEmpty()) {
             projects = projectService.latestProjects(3);
         }
-        List<PublicCollectionDtos.CollectionSummary> collections = configuredCollections();
-        if (collections.isEmpty()) {
-            collections = collectionService.latestCollections(6);
-        }
+        List<PublicCollectionDtos.CollectionSummary> collections = collectionService.latestCollections(6);
         List<PublicFeedbackDtos.Feedback> feedback = configuredFeedback();
         if (feedback.isEmpty()) {
             feedback = feedbackService.latest(3);
@@ -108,11 +106,12 @@ public class HomepageService {
         requireAdmin(adminId);
         return new HomepageDtos.FeatureOptions(
                 projectService.latestProjects(100),
-                collectionService.latestCollections(100),
+                List.of(),
                 feedbackService.latest(100),
                 featureRepository.findAllByDeletedFalseOrderByTargetTypeAscPinnedDescSortOrderAscIdAsc()
                         .stream()
                         .filter(feature -> "ACTIVE".equals(feature.getStatus()))
+                        .filter(feature -> HomepageFeatureTargetType.COLLECTION != feature.getTargetType())
                         .filter(this::isPublicFeature)
                         .map(this::toItem)
                         .toList()
@@ -185,9 +184,9 @@ public class HomepageService {
         SystemUser admin = requireAdmin(adminId);
         validateCarouselItems(request.items());
         Instant now = Instant.now();
-        Map<Long, HomepageCarouselItem> existingByPhoto = new LinkedHashMap<>();
+        Map<Long, HomepageCarouselItem> existingByCollection = new LinkedHashMap<>();
         carouselRepository.findAll().forEach(item -> {
-            existingByPhoto.put(item.getPhotoId(), item);
+            existingByCollection.put(item.getCollectionId(), item);
             item.setStatus(INACTIVE);
             item.setDeleted(true);
             item.setDeletedAt(now);
@@ -195,10 +194,10 @@ public class HomepageService {
         });
         List<HomepageCarouselItem> items = request.items().stream()
                 .map(requestItem -> {
-                    HomepageCarouselItem item = existingByPhoto.getOrDefault(
-                            requestItem.photoId(),
+                    HomepageCarouselItem item = existingByCollection.getOrDefault(
+                            requestItem.collectionId(),
                             new HomepageCarouselItem());
-                    item.setPhotoId(requestItem.photoId());
+                    item.setCollectionId(requestItem.collectionId());
                     item.setSortOrder(requestItem.sortOrder());
                     item.setFocalX(requestItem.focalX());
                     item.setFocalY(requestItem.focalY());
@@ -212,7 +211,7 @@ public class HomepageService {
                     return item;
                 })
                 .toList();
-        carouselRepository.saveAll(existingByPhoto.values());
+        carouselRepository.saveAll(existingByCollection.values());
         carouselRepository.saveAll(items);
         auditLogService.record(
                 adminId,
@@ -221,7 +220,7 @@ public class HomepageService {
                 "REPLACE_HOMEPAGE_CAROUSEL",
                 "HOMEPAGE_CAROUSEL",
                 null,
-                "Configured " + items.size() + " homepage carousel images",
+                "Configured " + items.size() + " homepage carousel collections",
                 ipAddress
         );
         return buildCarouselOptions();
@@ -236,17 +235,6 @@ public class HomepageService {
                 .map(HomepageFeature::getTargetId)
                 .toList();
         return projectService.projectsByIds(ids).stream().limit(PROJECT_LIMIT).toList();
-    }
-
-    private List<PublicCollectionDtos.CollectionSummary> configuredCollections() {
-        List<Long> ids = featureRepository
-                .findAllByTargetTypeAndStatusAndDeletedFalseOrderByPinnedDescSortOrderAscIdAsc(
-                        HomepageFeatureTargetType.COLLECTION,
-                        "ACTIVE")
-                .stream()
-                .map(HomepageFeature::getTargetId)
-                .toList();
-        return collectionService.collectionsByIds(ids).stream().limit(COLLECTION_LIMIT).toList();
     }
 
     private List<PublicFeedbackDtos.Feedback> configuredFeedback() {
@@ -267,9 +255,11 @@ public class HomepageService {
                 .filter(HomepageDtos.CarouselItem::valid)
                 .limit(CAROUSEL_LIMIT)
                 .map(item -> new HomepageDtos.CarouselSlide(
-                        item.photoId(),
                         item.collectionId(),
                         item.collectionTitle(),
+                        item.description(),
+                        item.eventDate(),
+                        item.locationText(),
                         item.previewUrl(),
                         item.thumbnailUrl(),
                         item.width(),
@@ -281,25 +271,14 @@ public class HomepageService {
     }
 
     private HomepageDtos.CarouselOptions buildCarouselOptions() {
-        List<CollectionPhoto> photos = photoRepository.findHomepageCarouselCandidates(
+        List<WorkCollection> collections = workCollectionRepository.findHomepageCarouselCandidates(
                 ReviewStatus.APPROVED,
                 PublishStatus.PUBLISHED,
                 ContentVisibility.PUBLIC,
                 PageRequest.of(0, CAROUSEL_CANDIDATE_LIMIT)
         );
-        Map<Long, WorkCollection> collections = workCollectionRepository.findAllById(
-                        photos.stream().map(CollectionPhoto::getCollectionId).distinct().toList())
-                .stream()
-                .collect(Collectors.toMap(WorkCollection::getId, Function.identity()));
-        Map<Long, MediaAsset> assets = assetRepository.findAllById(
-                        photos.stream().map(CollectionPhoto::getAssetId).distinct().toList())
-                .stream()
-                .collect(Collectors.toMap(MediaAsset::getId, Function.identity()));
-        List<HomepageDtos.CarouselCandidate> candidates = photos.stream()
-                .map(photo -> toCarouselCandidate(
-                        photo,
-                        collections.get(photo.getCollectionId()),
-                        assets.get(photo.getAssetId())))
+        List<HomepageDtos.CarouselCandidate> candidates = collections.stream()
+                .map(this::toCarouselCandidate)
                 .filter(candidate -> candidate != null)
                 .toList();
         List<HomepageDtos.CarouselItem> items = carouselRepository
@@ -311,66 +290,69 @@ public class HomepageService {
     }
 
     private void validateCarouselItems(List<HomepageDtos.CarouselItemRequest> items) {
-        Set<Long> photoIds = new HashSet<>();
+        Set<Long> collectionIds = new HashSet<>();
         for (HomepageDtos.CarouselItemRequest item : items) {
-            if (!photoIds.add(item.photoId())) {
+            if (!collectionIds.add(item.collectionId())) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "HOMEPAGE_CAROUSEL_DUPLICATE",
-                        "The same photo cannot be configured twice");
+                        "The same collection cannot be configured twice");
             }
-            requirePublicCarouselCandidate(item.photoId());
+            requirePublicCarouselCandidate(item.collectionId());
         }
     }
 
-    private HomepageDtos.CarouselCandidate requirePublicCarouselCandidate(Long photoId) {
-        CollectionPhoto photo = photoRepository.findById(photoId)
-                .orElseThrow(() -> invalidCarouselTarget(photoId));
-        WorkCollection collection = workCollectionRepository.findById(photo.getCollectionId())
-                .orElseThrow(() -> invalidCarouselTarget(photoId));
-        MediaAsset asset = assetRepository.findById(photo.getAssetId())
-                .orElseThrow(() -> invalidCarouselTarget(photoId));
-        HomepageDtos.CarouselCandidate candidate = toCarouselCandidate(photo, collection, asset);
+    private HomepageDtos.CarouselCandidate requirePublicCarouselCandidate(Long collectionId) {
+        WorkCollection collection = workCollectionRepository.findById(collectionId)
+                .orElseThrow(() -> invalidCarouselTarget(collectionId));
+        HomepageDtos.CarouselCandidate candidate = toCarouselCandidate(collection);
         if (candidate == null) {
-            throw invalidCarouselTarget(photoId);
+            throw invalidCarouselTarget(collectionId);
         }
         return candidate;
     }
 
-    private HomepageDtos.CarouselCandidate toCarouselCandidate(
-            CollectionPhoto photo,
-            WorkCollection collection,
-            MediaAsset asset
-    ) {
-        if (!isPublicCarouselPhoto(photo, collection, asset)) {
+    private HomepageDtos.CarouselCandidate toCarouselCandidate(WorkCollection collection) {
+        CollectionPhoto cover = collection.getCoverPhotoId() == null
+                ? null
+                : photoRepository.findById(collection.getCoverPhotoId()).orElse(null);
+        MediaAsset asset = cover == null
+                ? null
+                : assetRepository.findById(cover.getAssetId()).orElse(null);
+        if (carouselInvalidReason(collection, cover, asset) != null) {
             return null;
         }
+        WeddingProject project = publicProject(collection.getProjectId());
         return new HomepageDtos.CarouselCandidate(
-                photo.getId(),
                 collection.getId(),
                 collection.getTitle(),
+                collection.getDescription(),
+                project == null ? null : project.getEventDate(),
+                project == null ? null : project.getLocationText(),
                 publicUrl(asset.getPreviewPath()),
                 publicUrl(asset.getThumbnailPath()),
                 asset.getWidth(),
-                asset.getHeight(),
-                photo.getSortOrder()
+                asset.getHeight()
         );
     }
 
     private HomepageDtos.CarouselItem toCarouselItem(HomepageCarouselItem item) {
-        CollectionPhoto photo = photoRepository.findById(item.getPhotoId()).orElse(null);
-        WorkCollection collection = photo == null
+        WorkCollection collection = workCollectionRepository.findById(item.getCollectionId()).orElse(null);
+        CollectionPhoto cover = collection == null || collection.getCoverPhotoId() == null
                 ? null
-                : workCollectionRepository.findById(photo.getCollectionId()).orElse(null);
-        MediaAsset asset = photo == null
+                : photoRepository.findById(collection.getCoverPhotoId()).orElse(null);
+        MediaAsset asset = cover == null
                 ? null
-                : assetRepository.findById(photo.getAssetId()).orElse(null);
-        String invalidReason = carouselInvalidReason(photo, collection, asset);
+                : assetRepository.findById(cover.getAssetId()).orElse(null);
+        WeddingProject project = collection == null ? null : publicProject(collection.getProjectId());
+        String invalidReason = carouselInvalidReason(collection, cover, asset);
         return new HomepageDtos.CarouselItem(
                 item.getId(),
-                item.getPhotoId(),
-                collection == null ? null : collection.getId(),
+                item.getCollectionId(),
                 collection == null ? null : collection.getTitle(),
-                asset == null ? null : publicUrl(asset.getPreviewPath()),
-                asset == null ? null : publicUrl(asset.getThumbnailPath()),
+                collection == null ? null : collection.getDescription(),
+                project == null ? null : project.getEventDate(),
+                project == null ? null : project.getLocationText(),
+                asset == null ? null : publicUrlOrNull(asset.getPreviewPath()),
+                asset == null ? null : publicUrlOrNull(asset.getThumbnailPath()),
                 asset == null ? null : asset.getWidth(),
                 asset == null ? null : asset.getHeight(),
                 item.getSortOrder(),
@@ -382,52 +364,66 @@ public class HomepageService {
         );
     }
 
-    private boolean isPublicCarouselPhoto(
-            CollectionPhoto photo,
-            WorkCollection collection,
-            MediaAsset asset
-    ) {
-        return carouselInvalidReason(photo, collection, asset) == null;
-    }
-
     private String carouselInvalidReason(
-            CollectionPhoto photo,
             WorkCollection collection,
+            CollectionPhoto cover,
             MediaAsset asset
     ) {
-        if (photo == null || Boolean.TRUE.equals(photo.getDeleted())) {
-            return "PHOTO_NOT_AVAILABLE";
-        }
-        if (ReviewStatus.APPROVED != photo.getReviewStatus()) {
-            return "PHOTO_NOT_APPROVED";
-        }
         if (collection == null
-                || Boolean.TRUE.equals(collection.getDeleted())
+                || Boolean.TRUE.equals(collection.getDeleted())) {
+            return "COLLECTION_NOT_AVAILABLE";
+        }
+        if (ReviewStatus.APPROVED != collection.getReviewStatus()
                 || PublishStatus.PUBLISHED != collection.getPublishStatus()
                 || ContentVisibility.PUBLIC != collection.getVisibility()) {
             return "COLLECTION_NOT_PUBLIC";
         }
+        if (collection.getCoverPhotoId() == null) {
+            return "COLLECTION_COVER_REQUIRED";
+        }
+        if (cover == null
+                || !collection.getId().equals(cover.getCollectionId())
+                || Boolean.TRUE.equals(cover.getDeleted())
+                || ReviewStatus.APPROVED != cover.getReviewStatus()) {
+            return "COLLECTION_COVER_NOT_AVAILABLE";
+        }
         if (asset == null
                 || Boolean.TRUE.equals(asset.getDeleted())
-                || !"SUCCESS".equals(asset.getProcessStatus())) {
+                || !"SUCCESS".equals(asset.getProcessStatus())
+                || asset.getPreviewPath() == null
+                || asset.getThumbnailPath() == null) {
             return "ASSET_NOT_AVAILABLE";
         }
         return null;
     }
 
-    private ApiException invalidCarouselTarget(Long photoId) {
+    private WeddingProject publicProject(Long projectId) {
+        if (projectId == null) {
+            return null;
+        }
+        return projectRepository.findByIdAndDeletedFalse(projectId)
+                .filter(project -> PublishStatus.PUBLISHED == project.getPublishStatus())
+                .filter(project -> ContentVisibility.PUBLIC == project.getVisibility())
+                .orElse(null);
+    }
+
+    private ApiException invalidCarouselTarget(Long collectionId) {
         return new ApiException(HttpStatus.BAD_REQUEST, "HOMEPAGE_CAROUSEL_TARGET_INVALID",
-                "Homepage carousel images must belong to currently published public collections: " + photoId);
+                "Homepage carousel collections must be approved, public, published, and have a valid cover: "
+                        + collectionId);
     }
 
     private String publicUrl(String relativePath) {
         return "/media/" + relativePath.replace('\\', '/');
     }
 
+    private String publicUrlOrNull(String relativePath) {
+        return relativePath == null ? null : publicUrl(relativePath);
+    }
+
     private void validateItems(List<HomepageDtos.FeatureItemRequest> items) {
         Set<String> uniqueTargets = new HashSet<>();
         int projectCount = 0;
-        int collectionCount = 0;
         int feedbackCount = 0;
         for (HomepageDtos.FeatureItemRequest item : items) {
             String key = item.targetType() + ":" + item.targetId();
@@ -443,10 +439,7 @@ public class HomepageService {
                     }
                 }
                 case COLLECTION -> {
-                    collectionCount++;
-                    if (!collectionService.isPublicCollection(item.targetId())) {
-                        throw invalidTarget(item);
-                    }
+                    throw invalidTarget(item);
                 }
                 case FEEDBACK -> {
                     feedbackCount++;
@@ -456,9 +449,9 @@ public class HomepageService {
                 }
             }
         }
-        if (projectCount > PROJECT_LIMIT || collectionCount > COLLECTION_LIMIT || feedbackCount > FEEDBACK_LIMIT) {
+        if (projectCount > PROJECT_LIMIT || feedbackCount > FEEDBACK_LIMIT) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "HOMEPAGE_FEATURE_LIMIT",
-                    "Homepage feature limits are 6 projects, 12 collections, and 6 feedback items");
+                    "Homepage feature limits are 6 projects and 6 feedback items");
         }
     }
 
@@ -471,7 +464,7 @@ public class HomepageService {
     private boolean isPublicFeature(HomepageFeature feature) {
         return switch (feature.getTargetType()) {
             case PROJECT -> projectService.isPublicProject(feature.getTargetId());
-            case COLLECTION -> collectionService.isPublicCollection(feature.getTargetId());
+            case COLLECTION -> false;
             case FEEDBACK -> feedbackService.isPublicFeedback(feature.getTargetId());
         };
     }

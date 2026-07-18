@@ -12,6 +12,9 @@ import com.wedding.platform.content.review.persistence.entity.ReviewTargetType;
 import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
 import com.wedding.platform.content.shared.ReviewStatus;
+import com.wedding.platform.operations.notification.application.UserNotificationService;
+import com.wedding.platform.operations.notification.persistence.entity.UserNotificationRelatedType;
+import com.wedding.platform.operations.notification.persistence.entity.UserNotificationType;
 import com.wedding.platform.platform.audit.AuditLogService;
 import com.wedding.platform.platform.web.ApiException;
 import com.wedding.platform.system.account.persistence.entity.ProfessionalRole;
@@ -51,6 +54,7 @@ public class ProjectService {
     private final AuditLogService auditLogService;
     private final ReviewRevisionService reviewRevisionService;
     private final WorkCollectionRepository collectionRepository;
+    private final UserNotificationService notificationService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public ProjectService(
@@ -59,7 +63,8 @@ public class ProjectService {
             SystemUserRepository userRepository,
             AuditLogService auditLogService,
             ReviewRevisionService reviewRevisionService,
-            WorkCollectionRepository collectionRepository
+            WorkCollectionRepository collectionRepository,
+            UserNotificationService notificationService
     ) {
         this.projectRepository = projectRepository;
         this.projectCreatorRepository = projectCreatorRepository;
@@ -67,6 +72,7 @@ public class ProjectService {
         this.auditLogService = auditLogService;
         this.reviewRevisionService = reviewRevisionService;
         this.collectionRepository = collectionRepository;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -256,8 +262,27 @@ public class ProjectService {
         markContentChanged(project);
         project.setUpdatedBy(operatorId);
         project.setUpdatedAt(Instant.now());
+        String projectTitle = project.getTitle();
         project = projectRepository.saveAndFlush(project);
 
+        removedRelations.forEach(relation -> notificationService.notifyUser(
+                relation.getId().getCreatorUserId(),
+                operatorId,
+                UserNotificationType.PROJECT_PARTICIPANT_REMOVED,
+                "已移出婚礼项目",
+                "您已被移出项目“" + projectTitle + "”的参与创作者名单。",
+                UserNotificationRelatedType.PROJECT,
+                projectId
+        ));
+        newRelations.forEach(relation -> notificationService.notifyUser(
+                relation.getId().getCreatorUserId(),
+                operatorId,
+                UserNotificationType.PROJECT_PARTICIPANT_ADDED,
+                "已加入婚礼项目",
+                "您已加入项目“" + projectTitle + "”的参与创作者名单。",
+                UserNotificationRelatedType.PROJECT,
+                projectId
+        ));
         auditLogService.record(operatorId, actor.getAccountType(), "PROJECT", "ASSIGN_PROJECT_CREATORS",
                 "WEDDING_PROJECT", projectId, "Assigned " + desiredCreatorIds.size() + " project creators", ipAddress);
         return toResponse(project);

@@ -20,6 +20,9 @@ import com.wedding.platform.content.review.persistence.entity.ReviewTargetType;
 import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
 import com.wedding.platform.content.shared.ReviewStatus;
+import com.wedding.platform.operations.notification.application.UserNotificationService;
+import com.wedding.platform.operations.notification.persistence.entity.UserNotificationRelatedType;
+import com.wedding.platform.operations.notification.persistence.entity.UserNotificationType;
 import com.wedding.platform.platform.audit.AuditLogService;
 import com.wedding.platform.platform.web.ApiException;
 import com.wedding.platform.system.account.persistence.entity.SystemUser;
@@ -55,6 +58,7 @@ public class CollectionReviewService {
     private final AuditLogService auditLogService;
     private final ReviewRevisionService reviewRevisionService;
     private final PublicContentAccessService contentAccessService;
+    private final UserNotificationService notificationService;
 
     public CollectionReviewService(
             WorkCollectionRepository collectionRepository,
@@ -69,7 +73,8 @@ public class CollectionReviewService {
             CollectionPhotoService photoService,
             AuditLogService auditLogService,
             ReviewRevisionService reviewRevisionService,
-            PublicContentAccessService contentAccessService
+            PublicContentAccessService contentAccessService,
+            UserNotificationService notificationService
     ) {
         this.collectionRepository = collectionRepository;
         this.photoRepository = photoRepository;
@@ -83,6 +88,7 @@ public class CollectionReviewService {
         this.auditLogService = auditLogService;
         this.reviewRevisionService = reviewRevisionService;
         this.contentAccessService = contentAccessService;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -136,6 +142,14 @@ public class CollectionReviewService {
             collection.setPublishStatus(PublishStatus.UNPUBLISHED);
         }
         saveCollection(collection, operatorId);
+        notificationService.notifyAdmins(
+                operatorId,
+                UserNotificationType.COLLECTION_REVIEW_TASK,
+                "作品集待审核",
+                "作品集“" + collection.getTitle() + "”已提交审核，请及时处理。",
+                UserNotificationRelatedType.COLLECTION_REVIEW,
+                collectionId
+        );
         auditLogService.record(operatorId, actor.getAccountType(), "COLLECTION_REVIEW", "SUBMIT_COLLECTION",
                 "WORK_COLLECTION", collectionId, "Collection submitted for review", ipAddress);
         return detail(operatorId, collectionId);
@@ -199,6 +213,7 @@ public class CollectionReviewService {
         requireAdmin(actor);
         WorkCollection collection = getCollection(collectionId);
         requireVersion(collection, request.version());
+        ReviewStatus previousStatus = collection.getReviewStatus();
         reviewRevisionService.ensureCollectionBaseline(collection, activePhotos(collectionId));
         if (ReviewStatus.PENDING != collection.getReviewStatus()
                 && ReviewStatus.PARTIALLY_REJECTED != collection.getReviewStatus()) {
@@ -263,6 +278,7 @@ public class CollectionReviewService {
         }
         photoRepository.saveAll(selected);
         recalculateCollection(collection, operatorId, now);
+        notifyCollectionReviewResult(collection, operatorId, previousStatus);
         auditLogService.record(operatorId, actor.getAccountType(), "COLLECTION_REVIEW",
                 targetStatus == ReviewStatus.APPROVED ? "APPROVE_PHOTOS" : "REJECT_PHOTOS",
                 "WORK_COLLECTION", collectionId,
@@ -283,6 +299,7 @@ public class CollectionReviewService {
         requireAdmin(actor);
         WorkCollection collection = getCollection(collectionId);
         requireVersion(collection, request.version());
+        ReviewStatus previousStatus = collection.getReviewStatus();
         reviewRevisionService.ensureCollectionBaseline(collection, activePhotos(collectionId));
         if (ReviewStatus.PENDING != collection.getReviewStatus()
                 && ReviewStatus.PARTIALLY_REJECTED != collection.getReviewStatus()) {
@@ -299,6 +316,7 @@ public class CollectionReviewService {
                 operatorId
         );
         recalculateCollection(collection, operatorId, Instant.now());
+        notifyCollectionReviewResult(collection, operatorId, previousStatus);
         auditLogService.record(operatorId, actor.getAccountType(), "COLLECTION_REVIEW",
                 request.decision() == ReviewDtos.ReviewDecision.APPROVE
                         ? "APPROVE_COLLECTION_FIELDS"
@@ -322,6 +340,7 @@ public class CollectionReviewService {
         requireAdmin(actor);
         WorkCollection collection = getCollection(collectionId);
         requireVersion(collection, request.version());
+        ReviewStatus previousStatus = collection.getReviewStatus();
         List<CollectionPhoto> photos = activePhotos(collectionId);
         requireSubmissionReady(collection, photos);
         reviewRevisionService.ensureCollectionBaseline(collection, photos);
@@ -351,6 +370,7 @@ public class CollectionReviewService {
         }
         Instant now = Instant.now();
         approveCollectionState(collection, operatorId, now);
+        notifyCollectionReviewResult(collection, operatorId, previousStatus);
         auditLogService.record(operatorId, actor.getAccountType(), "COLLECTION_REVIEW", "APPROVE_COLLECTION",
                 "WORK_COLLECTION", collectionId, "Collection metadata approved", ipAddress);
         return detail(operatorId, collectionId);
@@ -367,6 +387,7 @@ public class CollectionReviewService {
         requireAdmin(actor);
         WorkCollection collection = getCollection(collectionId);
         requireVersion(collection, request.version());
+        ReviewStatus previousStatus = collection.getReviewStatus();
         reviewRevisionService.ensureCollectionBaseline(collection, activePhotos(collectionId));
         if (ReviewStatus.PENDING != collection.getReviewStatus()
                 && ReviewStatus.PARTIALLY_REJECTED != collection.getReviewStatus()) {
@@ -385,6 +406,7 @@ public class CollectionReviewService {
         collection.setReviewedAt(Instant.now());
         collection.setReviewedBy(operatorId);
         saveCollection(collection, operatorId);
+        notifyCollectionReviewResult(collection, operatorId, previousStatus);
         auditLogService.record(operatorId, actor.getAccountType(), "COLLECTION_REVIEW", "REJECT_COLLECTION",
                 "WORK_COLLECTION", collectionId, request.reason().trim(), ipAddress);
         return detail(operatorId, collectionId);
@@ -434,6 +456,14 @@ public class CollectionReviewService {
         collection.setPublishedBy(operatorId);
         collection.setOfflineReason(null);
         saveCollection(collection, operatorId);
+        notificationService.notifyCollectionCreators(
+                collectionId,
+                operatorId,
+                UserNotificationType.COLLECTION_PUBLISHED,
+                "作品集已发布",
+                "作品集“" + collection.getTitle() + "”已发布到官网。",
+                UserNotificationRelatedType.COLLECTION
+        );
         auditLogService.record(operatorId, actor.getAccountType(), "COLLECTION_PUBLICATION", "PUBLISH_COLLECTION",
                 "WORK_COLLECTION", collectionId, "Collection published as " + request.visibility(), ipAddress);
         return detail(operatorId, collectionId);
@@ -457,6 +487,14 @@ public class CollectionReviewService {
         collection.setPublishStatus(PublishStatus.OFFLINE);
         collection.setOfflineReason(request.reason().trim());
         saveCollection(collection, operatorId);
+        notificationService.notifyCollectionCreators(
+                collectionId,
+                operatorId,
+                UserNotificationType.COLLECTION_OFFLINE,
+                "作品集已下架",
+                "作品集“" + collection.getTitle() + "”已从官网下架。原因：" + collection.getOfflineReason(),
+                UserNotificationRelatedType.COLLECTION
+        );
         auditLogService.record(operatorId, actor.getAccountType(), "COLLECTION_PUBLICATION", "OFFLINE_COLLECTION",
                 "WORK_COLLECTION", collectionId, request.reason().trim(), ipAddress);
         return detail(operatorId, collectionId);
@@ -519,6 +557,38 @@ public class CollectionReviewService {
         collection.setReviewedAt(reviewedAt);
         collection.setReviewedBy(operatorId);
         saveCollection(collection, operatorId);
+    }
+
+    private void notifyCollectionReviewResult(
+            WorkCollection collection,
+            Long operatorId,
+            ReviewStatus previousStatus
+    ) {
+        if (previousStatus == collection.getReviewStatus()) {
+            return;
+        }
+        if (ReviewStatus.APPROVED == collection.getReviewStatus()) {
+            notificationService.notifyCollectionCreators(
+                    collection.getId(),
+                    operatorId,
+                    UserNotificationType.COLLECTION_REVIEW_APPROVED,
+                    "作品集审核已通过",
+                    "作品集“" + collection.getTitle() + "”的审核已通过，可以继续发布或上架。",
+                    UserNotificationRelatedType.COLLECTION_REVIEW
+            );
+        } else if (ReviewStatus.PARTIALLY_REJECTED == collection.getReviewStatus()) {
+            notificationService.notifyCollectionCreators(
+                    collection.getId(),
+                    operatorId,
+                    UserNotificationType.COLLECTION_REVIEW_REJECTED,
+                    "作品集审核需要修改",
+                    "作品集“" + collection.getTitle() + "”的审核未完全通过。原因："
+                            + (collection.getRejectionReason() == null
+                            ? "请查看审核详情"
+                            : collection.getRejectionReason()),
+                    UserNotificationRelatedType.COLLECTION_REVIEW
+            );
+        }
     }
 
     private ReviewDtos.ReviewQueueItem toQueueItem(WorkCollection collection) {

@@ -1,5 +1,8 @@
 import axios from 'axios'
 
+const VISITOR_KEY = 'wedding_public_visitor'
+let memoryVisitorId = null
+
 const http = axios.create({
   baseURL: '/api/public',
   timeout: 15000,
@@ -39,4 +42,33 @@ export const publicApi = {
   submitInquiry(payload) {
     return http.post('/inquiries', payload)
   },
+  trackVisit(type, targetId = null) {
+    return http.post('/analytics/visits', {
+      visitorId: visitorId(),
+      type,
+      targetId,
+    })
+  },
+}
+
+function visitorId() {
+  if (memoryVisitorId) return memoryVisitorId
+  try {
+    const stored = localStorage.getItem(VISITOR_KEY)
+    if (stored) {
+      memoryVisitorId = stored
+      return stored
+    }
+    memoryVisitorId = createVisitorId()
+    localStorage.setItem(VISITOR_KEY, memoryVisitorId)
+    return memoryVisitorId
+  } catch {
+    memoryVisitorId = createVisitorId()
+    return memoryVisitorId
+  }
+}
+
+function createVisitorId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
+  return `wv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 14)}`
 }

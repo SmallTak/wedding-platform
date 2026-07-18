@@ -68,6 +68,22 @@ public interface CustomerFeedbackRepository extends JpaRepository<CustomerFeedba
 
     @Query("""
             SELECT feedback
+            FROM CustomerFeedback feedback
+            WHERE feedback.deleted = false
+              AND feedback.customerUserId = :customerUserId
+              AND (:reviewStatus IS NULL OR feedback.reviewStatus = :reviewStatus)
+              AND (:publishStatus IS NULL OR feedback.publishStatus = :publishStatus)
+            ORDER BY feedback.createdAt DESC, feedback.id DESC
+            """)
+    Page<CustomerFeedback> findCustomerFeedback(
+            @Param("customerUserId") Long customerUserId,
+            @Param("reviewStatus") FeedbackReviewStatus reviewStatus,
+            @Param("publishStatus") FeedbackPublishStatus publishStatus,
+            Pageable pageable
+    );
+
+    @Query("""
+            SELECT feedback
             FROM CustomerFeedback feedback, WeddingProject project
             WHERE feedback.deleted = false
               AND feedback.projectId = project.id

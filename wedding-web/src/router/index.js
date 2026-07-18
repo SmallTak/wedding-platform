@@ -1,5 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
+import { publicApi } from '../api/public'
+import { pinia } from '../stores'
+import { useCustomerAuthStore } from '../stores/customerAuth'
+
+const trackedPublicRoutes = new Set([
+  'home',
+  'collection-detail',
+  'project-list',
+  'project-detail',
+  'reviews',
+])
 
 const router = createRouter({
   history: createWebHistory(),
@@ -44,14 +55,95 @@ const router = createRouter({
         title: '客户评价',
       },
     },
+    {
+      path: '/customer/login',
+      name: 'customer-login',
+      component: () => import('../views/customer/CustomerAuthView.vue'),
+      meta: { title: '客户登录', customerGuest: true },
+    },
+    {
+      path: '/customer/register',
+      name: 'customer-register',
+      component: () => import('../views/customer/CustomerAuthView.vue'),
+      meta: { title: '客户注册', customerGuest: true },
+    },
+    {
+      path: '/customer',
+      component: () => import('../layouts/CustomerCenterLayout.vue'),
+      meta: { customer: true },
+      children: [
+        { path: '', redirect: { name: 'customer-projects' } },
+        {
+          path: 'messages',
+          name: 'customer-messages',
+          component: () => import('../views/customer/CustomerMessagesView.vue'),
+          meta: { title: '站内消息', customer: true },
+        },
+        {
+          path: 'projects',
+          name: 'customer-projects',
+          component: () => import('../views/customer/CustomerProjectsView.vue'),
+          meta: { title: '项目关联', customer: true },
+        },
+        {
+          path: 'feedback',
+          name: 'customer-feedback',
+          component: () => import('../views/customer/CustomerFeedbackView.vue'),
+          meta: { title: '我的评价', customer: true },
+        },
+        {
+          path: 'settings',
+          name: 'customer-settings',
+          component: () => import('../views/customer/CustomerSettingsView.vue'),
+          meta: { title: '账号设置', customer: true },
+        },
+      ],
+    },
   ],
   scrollBehavior() {
     return { top: 0 }
   },
 })
 
+router.beforeEach(async (to) => {
+  const auth = useCustomerAuthStore(pinia)
+
+  if (to.meta.customerGuest) {
+    if (!auth.token) return true
+    try {
+      if (!auth.user) await auth.fetchCurrentUser()
+      return auth.setupRequired
+        ? { name: 'customer-settings' }
+        : { name: 'customer-projects' }
+    } catch {
+      auth.logout()
+      return true
+    }
+  }
+
+  if (!to.meta.customer) return true
+  if (!auth.token) {
+    return { name: 'customer-login', query: { redirect: to.fullPath } }
+  }
+  if (!auth.user) {
+    try {
+      await auth.fetchCurrentUser()
+    } catch {
+      auth.logout()
+      return { name: 'customer-login' }
+    }
+  }
+  if (auth.setupRequired && to.name !== 'customer-settings') {
+    return { name: 'customer-settings' }
+  }
+  return true
+})
+
 router.afterEach((to) => {
   document.title = `${to.meta.title || '婚礼作品集'} | 糖诗·美学`
+  if (trackedPublicRoutes.has(to.name)) {
+    publicApi.trackVisit('SITE').catch(() => {})
+  }
 })
 
 export default router

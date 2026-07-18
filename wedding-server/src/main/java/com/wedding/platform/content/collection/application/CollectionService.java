@@ -23,6 +23,9 @@ import com.wedding.platform.content.review.persistence.entity.ReviewTargetType;
 import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
 import com.wedding.platform.content.shared.ReviewStatus;
+import com.wedding.platform.operations.notification.application.UserNotificationService;
+import com.wedding.platform.operations.notification.persistence.entity.UserNotificationRelatedType;
+import com.wedding.platform.operations.notification.persistence.entity.UserNotificationType;
 import com.wedding.platform.platform.audit.AuditLogService;
 import com.wedding.platform.platform.web.ApiException;
 import com.wedding.platform.system.account.persistence.entity.ProfessionalRole;
@@ -62,6 +65,7 @@ public class CollectionService {
     private final SystemUserRepository userRepository;
     private final AuditLogService auditLogService;
     private final ReviewRevisionService reviewRevisionService;
+    private final UserNotificationService notificationService;
 
     public CollectionService(
             WorkCollectionRepository collectionRepository,
@@ -74,7 +78,8 @@ public class CollectionService {
             CollectionPhotoRepository photoRepository,
             SystemUserRepository userRepository,
             AuditLogService auditLogService,
-            ReviewRevisionService reviewRevisionService
+            ReviewRevisionService reviewRevisionService,
+            UserNotificationService notificationService
     ) {
         this.collectionRepository = collectionRepository;
         this.collectionCreatorRepository = collectionCreatorRepository;
@@ -87,6 +92,7 @@ public class CollectionService {
         this.userRepository = userRepository;
         this.auditLogService = auditLogService;
         this.reviewRevisionService = reviewRevisionService;
+        this.notificationService = notificationService;
     }
 
     @Transactional(readOnly = true)
@@ -307,12 +313,13 @@ public class CollectionService {
                 .findAllByCollectionIdAndDeletedFalseOrderBySortOrderAscIdAsc(collectionId);
         reviewRevisionService.ensureCollectionBaseline(collection, activePhotos);
         reviewRevisionService.cancelPendingSubmission(ReviewTargetType.COLLECTION, collectionId, operatorId);
-        collectionCreatorRepository.deleteAll(existingRelations.stream()
+        List<CollectionCreator> removedRelations = existingRelations.stream()
                 .filter(relation -> !desiredCreatorIds.contains(relation.getId().getCreatorUserId()))
-                .toList());
+                .toList();
+        collectionCreatorRepository.deleteAll(removedRelations);
 
         Instant joinedAt = Instant.now();
-        collectionCreatorRepository.saveAll(desiredCreatorIds.stream()
+        List<CollectionCreator> newRelations = desiredCreatorIds.stream()
                 .filter(creatorId -> !existingByCreatorId.containsKey(creatorId))
                 .map(creatorId -> {
                     CollectionCreator relation = new CollectionCreator();
@@ -320,13 +327,33 @@ public class CollectionService {
                     relation.setJoinedAt(joinedAt);
                     return relation;
                 })
-                .toList());
+                .toList();
+        collectionCreatorRepository.saveAll(newRelations);
 
         markContentChanged(collection, operatorId);
         collection.setUpdatedBy(operatorId);
         collection.setUpdatedAt(Instant.now());
+        String collectionTitle = collection.getTitle();
         collection = collectionRepository.saveAndFlush(collection);
 
+        removedRelations.forEach(relation -> notificationService.notifyUser(
+                relation.getId().getCreatorUserId(),
+                operatorId,
+                UserNotificationType.COLLECTION_PARTICIPANT_REMOVED,
+                "已移出作品集",
+                "您已被移出作品集“" + collectionTitle + "”的共同创作者名单。",
+                UserNotificationRelatedType.COLLECTION,
+                collectionId
+        ));
+        newRelations.forEach(relation -> notificationService.notifyUser(
+                relation.getId().getCreatorUserId(),
+                operatorId,
+                UserNotificationType.COLLECTION_PARTICIPANT_ADDED,
+                "已加入作品集",
+                "您已加入作品集“" + collectionTitle + "”的共同创作者名单。",
+                UserNotificationRelatedType.COLLECTION,
+                collectionId
+        ));
         auditLogService.record(operatorId, actor.getAccountType(), "COLLECTION", "ASSIGN_COLLECTION_CREATORS",
                 "WORK_COLLECTION", collectionId,
                 "Assigned " + desiredCreatorIds.size() + " collection creators", ipAddress);

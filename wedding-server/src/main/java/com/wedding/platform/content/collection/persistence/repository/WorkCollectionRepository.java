@@ -151,6 +151,23 @@ public interface WorkCollectionRepository extends JpaRepository<WorkCollection, 
             SELECT work
             FROM WorkCollection work
             WHERE work.deleted = false
+              AND work.reviewStatus = :reviewStatus
+              AND work.publishStatus = :publishStatus
+              AND work.visibility = :visibility
+              AND work.coverPhotoId IS NOT NULL
+            ORDER BY work.publishedAt DESC, work.id DESC
+            """)
+    List<WorkCollection> findHomepageCarouselCandidates(
+            @Param("reviewStatus") ReviewStatus reviewStatus,
+            @Param("publishStatus") PublishStatus publishStatus,
+            @Param("visibility") ContentVisibility visibility,
+            Pageable pageable
+    );
+
+    @Query("""
+            SELECT work
+            FROM WorkCollection work
+            WHERE work.deleted = false
               AND work.projectId = :projectId
               AND work.publishStatus = :publishStatus
               AND work.visibility = :visibility

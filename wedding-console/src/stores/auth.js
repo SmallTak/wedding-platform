@@ -23,6 +23,11 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function login(payload) {
     const { data } = await http.post('/auth/login', payload)
+    if (data.user?.accountType === 'CUSTOMER') {
+      const error = new Error('CUSTOMER_CONSOLE_ACCESS_DENIED')
+      error.code = 'CUSTOMER_CONSOLE_ACCESS_DENIED'
+      throw error
+    }
     token.value = data.accessToken
     localStorage.setItem(TOKEN_KEY, data.accessToken)
     persistUser(data.user)

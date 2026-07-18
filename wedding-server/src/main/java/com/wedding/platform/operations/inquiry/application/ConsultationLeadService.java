@@ -3,6 +3,9 @@ package com.wedding.platform.operations.inquiry.application;
 import com.wedding.platform.operations.inquiry.persistence.entity.ConsultationLead;
 import com.wedding.platform.operations.inquiry.persistence.entity.InquiryFollowStatus;
 import com.wedding.platform.operations.inquiry.persistence.repository.ConsultationLeadRepository;
+import com.wedding.platform.operations.notification.application.UserNotificationService;
+import com.wedding.platform.operations.notification.persistence.entity.UserNotificationRelatedType;
+import com.wedding.platform.operations.notification.persistence.entity.UserNotificationType;
 import com.wedding.platform.operations.inquiry.web.InquiryDtos;
 import com.wedding.platform.platform.audit.AuditLogService;
 import com.wedding.platform.platform.web.ApiException;
@@ -35,6 +38,7 @@ public class ConsultationLeadService {
 
     private final ConsultationLeadRepository leadRepository;
     private final SystemUserRepository userRepository;
+    private final UserNotificationService notificationService;
     private final AuditLogService auditLogService;
     private final SecureRandom random = new SecureRandom();
     private final Map<String, Deque<Instant>> submissionBuckets = new ConcurrentHashMap<>();
@@ -43,11 +47,13 @@ public class ConsultationLeadService {
     public ConsultationLeadService(
             ConsultationLeadRepository leadRepository,
             SystemUserRepository userRepository,
-            AuditLogService auditLogService
+            AuditLogService auditLogService,
+            UserNotificationService notificationService
     ) {
         this.leadRepository = leadRepository;
         this.userRepository = userRepository;
         this.auditLogService = auditLogService;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -70,6 +76,14 @@ public class ConsultationLeadService {
         lead.setFollowStatus(InquiryFollowStatus.NEW);
         lead.setSource("WEBSITE");
         lead = leadRepository.save(lead);
+        notificationService.notifyAdmins(
+                null,
+                UserNotificationType.CONSULTATION_NEW,
+                "新的咨询线索",
+                "收到新的官网咨询线索，编号为 " + lead.getReferenceCode() + "，请及时跟进。",
+                UserNotificationRelatedType.INQUIRY,
+                lead.getId()
+        );
         auditLogService.record(
                 null,
                 null,
