@@ -1,5 +1,9 @@
 package com.wedding.platform.platform.file;
 
+import com.drew.imaging.ImageMetadataReader;
+import com.drew.imaging.ImageProcessingException;
+import com.drew.metadata.Metadata;
+import com.drew.metadata.exif.ExifIFD0Directory;
 import com.wedding.platform.platform.web.ApiException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -19,6 +23,7 @@ import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -198,7 +203,16 @@ public class CollectionImageStorageService {
                 if (image == null) {
                     throw invalidFormat();
                 }
-                return new DecodedImage(toRgb(image), mimeType, width, height);
+                BufferedImage normalized = normalizeOrientation(
+                        image,
+                        readExifOrientation(source, mimeType)
+                );
+                return new DecodedImage(
+                        normalized,
+                        mimeType,
+                        normalized.getWidth(),
+                        normalized.getHeight()
+                );
             } finally {
                 reader.dispose();
             }
@@ -207,6 +221,54 @@ public class CollectionImageStorageService {
         } catch (IOException exception) {
             throw invalidFormat();
         }
+    }
+
+    private int readExifOrientation(Path source, String mimeType) {
+        if (!"image/jpeg".equals(mimeType)) {
+            return 1;
+        }
+        try {
+            Metadata metadata = ImageMetadataReader.readMetadata(source.toFile());
+            ExifIFD0Directory directory = metadata.getFirstDirectoryOfType(ExifIFD0Directory.class);
+            if (directory == null) {
+                return 1;
+            }
+            Integer orientation = directory.getInteger(ExifIFD0Directory.TAG_ORIENTATION);
+            return orientation != null && orientation >= 1 && orientation <= 8 ? orientation : 1;
+        } catch (ImageProcessingException | IOException exception) {
+            return 1;
+        }
+    }
+
+    private BufferedImage normalizeOrientation(BufferedImage source, int orientation) {
+        if (orientation == 1) {
+            return toRgb(source);
+        }
+
+        int sourceWidth = source.getWidth();
+        int sourceHeight = source.getHeight();
+        boolean swapsDimensions = orientation >= 5;
+        int targetWidth = swapsDimensions ? sourceHeight : sourceWidth;
+        int targetHeight = swapsDimensions ? sourceWidth : sourceHeight;
+        AffineTransform transform = switch (orientation) {
+            case 2 -> new AffineTransform(-1, 0, 0, 1, sourceWidth, 0);
+            case 3 -> new AffineTransform(-1, 0, 0, -1, sourceWidth, sourceHeight);
+            case 4 -> new AffineTransform(1, 0, 0, -1, 0, sourceHeight);
+            case 5 -> new AffineTransform(0, 1, 1, 0, 0, 0);
+            case 6 -> new AffineTransform(0, 1, -1, 0, sourceHeight, 0);
+            case 7 -> new AffineTransform(0, -1, -1, 0, sourceHeight, sourceWidth);
+            case 8 -> new AffineTransform(0, -1, 1, 0, 0, sourceWidth);
+            default -> new AffineTransform();
+        };
+
+        BufferedImage target = new BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = target.createGraphics();
+        try {
+            graphics.drawImage(source, transform, null);
+        } finally {
+            graphics.dispose();
+        }
+        return target;
     }
 
     private BufferedImage resize(BufferedImage source, int maxSize) {

@@ -13,6 +13,28 @@
 - 更新主产品方案和开发交接，将品牌升级列为待实现事项；本次没有修改应用代码或生产环境。
 - 验证：人工核对当前前端品牌文本和水印配置，`git diff --check`。
 
+### 修复上传图片自动翻转
+
+- 修复手机 JPEG 依赖 EXIF Orientation 显示方向，但后端生成预览图和缩略图时忽略方向元数据，
+  导致上传后横置、倒置或镜像的问题。
+- 引入 `metadata-extractor 2.20.0` 读取 JPEG EXIF，在缩放和加水印前归一化方向 1 至 8；
+  原图保持不变，数据库宽高改为转正后的展示尺寸。
+- 新增非对称四象限图片测试，覆盖 8 种方向的尺寸交换和四角像素位置。
+- 验证：后端 `clean test` 共 18 个测试通过。
+- 验证：开发机默认 Node.js 16 直接执行两个 `npm run build` 时因不支持
+  `node:util.styleText` 失败；随后执行 `./deploy/scripts/build-all.sh`，官网、工作台和
+  Spring Boot `bootJar` 构建通过，工作台仍有主 chunk 超过 500 kB 的警告。
+- 验证：`git diff --check` 通过。
+- 部署：执行 `./deploy/scripts/deploy-local.sh`，脚本内后端 `clean test` 共 18 个测试通过，
+  官网、工作台和 Spring Boot `bootJar` 构建通过；工作台仍有主 chunk 超过 500 kB 的警告。
+- 部署：完成应用与配置备份、文件替换、systemd 重启、Nginx 校验和正式域名验收；备份目录为
+  `/home/apps/wedding-platform/backups/20260718-085606`，本次没有 Flyway 迁移或数据库备份。
+- 验证：systemd 服务为 `active`，应用在 17.323 秒内启动，生产 schema 保持 `V7`；官网、
+  工作台、公开状态和公开作品集接口返回 `200`，Nginx 配置检查通过。
+- 验证：线上后端 JAR 与本次构建哈希一致并包含 `metadata-extractor 2.20.0`，官网和工作台
+  线上文件与构建输出一致。
+- 已有错误预览图和缩略图不会自动重建，需删除并重新上传对应图片，或另行执行派生图重建。
+
 ### 作品集列表补充发布入口
 
 - 修复管理员看到作品集为 `APPROVED + READY`，但作品集列表没有发布操作的问题。
