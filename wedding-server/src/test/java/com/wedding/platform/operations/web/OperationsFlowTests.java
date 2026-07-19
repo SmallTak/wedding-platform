@@ -460,6 +460,8 @@ class OperationsFlowTests {
                         .value("Homepage carousel integration test collection"))
                 .andExpect(jsonPath("$.carousel[0].eventDate").value("2026-10-18"))
                 .andExpect(jsonPath("$.carousel[0].locationText").value("杭州"))
+                .andExpect(jsonPath("$.carousel[0].originalUrl")
+                        .value("/media/originals/operations-carousel.jpg"))
                 .andExpect(jsonPath("$.carousel[0].previewUrl").value("/media/previews/operations-carousel.jpg"));
 
         fixture.collection().setVisibility(ContentVisibility.HIDDEN);

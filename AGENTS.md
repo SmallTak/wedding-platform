@@ -10,7 +10,7 @@
 - `wedding-console`：Vue 3、Vite、Vue Router、Pinia、Element Plus。
 - `wedding-server`：Java 17、Spring Boot、Gradle、Spring Data JPA、Spring Security、Flyway。
 - 生产数据库：MySQL。
-- 图片：服务器本地磁盘，Nginx 仅公开预览图与缩略图。
+- 图片：服务器本地磁盘；Nginx 公开原图、预览图与缩略图，官网业务图片使用原图。
 
 ## 工程约束
 

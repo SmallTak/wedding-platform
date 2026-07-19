@@ -183,6 +183,7 @@ public class PublicProjectService {
     }
 
     private PublicProjectDtos.ProjectSummary toSummary(WeddingProject project) {
+        String coverOriginalUrl = null;
         String coverPreviewUrl = null;
         String coverThumbnailUrl = null;
         if (project.getCoverAssetId() != null) {
@@ -191,14 +192,16 @@ public class PublicProjectService {
                     .filter(item -> "SUCCESS".equals(item.getProcessStatus()))
                     .orElse(null);
             if (asset != null) {
+                coverOriginalUrl = publicUrl(asset.getOriginalPath());
                 coverPreviewUrl = publicUrl(asset.getPreviewPath());
                 coverThumbnailUrl = publicUrl(asset.getThumbnailPath());
             }
         }
-        if (coverPreviewUrl == null) {
+        if (coverOriginalUrl == null) {
             PublicCollectionDtos.CollectionSummary firstCollection =
                     collectionService.firstProjectCollection(project.getId());
             if (firstCollection != null) {
+                coverOriginalUrl = firstCollection.coverOriginalUrl();
                 coverPreviewUrl = firstCollection.coverPreviewUrl();
                 coverThumbnailUrl = firstCollection.coverThumbnailUrl();
             }
@@ -211,6 +214,7 @@ public class PublicProjectService {
                 project.getRegionCode(),
                 project.getLocationText(),
                 project.getDescription(),
+                coverOriginalUrl,
                 coverPreviewUrl,
                 coverThumbnailUrl,
                 project.getPublishedAt()

@@ -333,7 +333,7 @@ function formatDate(value) {
             class="homepage-project-item"
           >
             <img
-              :src="project.coverThumbnailUrl || project.coverPreviewUrl || heroImage"
+              :src="project.coverOriginalUrl || heroImage"
               :alt="project.title"
               loading="lazy"
             />
@@ -375,7 +375,7 @@ function formatDate(value) {
           >
             <div
               class="work-image"
-              :style="{ backgroundImage: `url(${work.coverThumbnailUrl || work.coverPreviewUrl || heroImage})` }"
+              :style="{ backgroundImage: `url(${work.coverOriginalUrl || heroImage})` }"
             ></div>
             <div class="work-meta">
               <div>
@@ -406,7 +406,7 @@ function formatDate(value) {
             :aria-hidden="index === currentWorkIndex ? undefined : 'true'"
             :tabindex="index === currentWorkIndex ? undefined : -1"
             :style="{
-              backgroundImage: `url(${slide.previewUrl})`,
+              backgroundImage: `url(${slide.originalUrl})`,
               backgroundPosition: `${Number(slide.focalX ?? 50)}% ${Number(slide.focalY ?? 50)}%`,
             }"
           >

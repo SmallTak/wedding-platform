@@ -101,7 +101,7 @@ function formatDate(value) {
     <main v-else-if="project">
       <section
         class="project-detail-hero"
-        :style="{ backgroundImage: `url(${project.coverPreviewUrl || heroImage})` }"
+        :style="{ backgroundImage: `url(${project.coverOriginalUrl || heroImage})` }"
       >
         <div class="hero-overlay"></div>
         <div>
@@ -149,7 +149,7 @@ function formatDate(value) {
           >
             <div
               class="work-image"
-              :style="{ backgroundImage: `url(${collection.coverThumbnailUrl || collection.coverPreviewUrl || heroImage})` }"
+              :style="{ backgroundImage: `url(${collection.coverOriginalUrl || heroImage})` }"
             ></div>
             <div class="work-meta">
               <div>

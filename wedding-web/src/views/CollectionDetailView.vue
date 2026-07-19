@@ -107,7 +107,7 @@ function closePreview() {
     <main v-else-if="collection">
       <section
         class="collection-hero"
-        :style="{ backgroundImage: `url(${collection.coverPreviewUrl})` }"
+        :style="{ backgroundImage: `url(${collection.coverOriginalUrl})` }"
       >
         <div class="hero-overlay"></div>
         <div class="collection-hero-content">
@@ -149,12 +149,12 @@ function closePreview() {
           :style="{ aspectRatio: `${photo.width} / ${photo.height}` }"
           @click="openPreview(index)"
         >
-          <img :src="photo.thumbnailUrl" :alt="`${collection.title} 图片 ${index + 1}`" loading="lazy" />
+          <img :src="photo.originalUrl" :alt="`${collection.title} 图片 ${index + 1}`" loading="lazy" />
         </button>
       </section>
 
       <section class="collection-end">
-        <p>{{ photos.length }} 张公开预览</p>
+        <p>{{ photos.length }} 张公开原图</p>
         <RouterLink class="contact-link" to="/">浏览更多作品</RouterLink>
       </section>
     </main>
@@ -163,7 +163,7 @@ function closePreview() {
       <button type="button" aria-label="关闭预览" title="关闭预览" @click="closePreview">
         <X :size="22" />
       </button>
-      <img :src="activePhoto.previewUrl" :alt="collection.title" />
+      <img :src="activePhoto.originalUrl" :alt="collection.title" />
       <span>{{ activePhotoIndex + 1 }} / {{ photos.length }}</span>
     </div>
   </div>

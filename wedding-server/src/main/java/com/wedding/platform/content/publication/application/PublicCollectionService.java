@@ -177,6 +177,7 @@ public class PublicCollectionService {
                             photo.getId(),
                             asset.getWidth(),
                             asset.getHeight(),
+                            publicUrl(asset.getOriginalPath()),
                             publicUrl(asset.getPreviewPath()),
                             publicUrl(asset.getThumbnailPath()),
                             photo.getSortOrder()
@@ -273,6 +274,7 @@ public class PublicCollectionService {
                 ))
                 .toList();
 
+        String coverOriginalUrl = null;
         String coverPreviewUrl = null;
         String coverThumbnailUrl = null;
         if (collection.getCoverPhotoId() != null) {
@@ -283,6 +285,7 @@ public class PublicCollectionService {
             if (cover != null) {
                 MediaAsset asset = assetRepository.findById(cover.getAssetId()).orElse(null);
                 if (asset != null) {
+                    coverOriginalUrl = publicUrl(asset.getOriginalPath());
                     coverPreviewUrl = publicUrl(asset.getPreviewPath());
                     coverThumbnailUrl = publicUrl(asset.getThumbnailPath());
                 }
@@ -295,6 +298,7 @@ public class PublicCollectionService {
                 collection.getDescription(),
                 categorySummary,
                 tags,
+                coverOriginalUrl,
                 coverPreviewUrl,
                 coverThumbnailUrl,
                 collection.getPublishedAt(),

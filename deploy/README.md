@@ -1,6 +1,7 @@
 # Deploy
 
 第一阶段部署采用 Nginx、Spring Boot 和 MySQL，图片文件保存在服务器本地磁盘。
+Nginx 公开原图、预览图和缩略图目录，官网业务图片使用原图，工作台继续使用派生图。
 
 一个域名即可承载全部服务：
 
@@ -122,6 +123,7 @@ curl -I https://photo.shop-hz.top/
 curl https://photo.shop-hz.top/api/public/status
 ```
 
-截至 2026-07-18，生产服务、HTTPS、主域名解析、登录接口、审核中心、密码访问、公开婚礼项目
-及逻辑删除均已部署，生产数据库保持 Flyway `V7`。首个生产管理员已经创建，
+截至 2026-07-19，生产服务、HTTPS、主域名解析、登录接口、审核中心、密码访问、公开婚礼项目、
+客户中心、数据统计、统一站内消息和官网原图展示均已部署，生产数据库保持 Flyway `V14`。
+首个生产管理员已经创建，
 `BOOTSTRAP_ADMIN_ENABLED` 保持为 `false`，环境文件中不保留临时密码。

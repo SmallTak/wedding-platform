@@ -36,6 +36,7 @@ public final class PublicCollectionDtos {
             String description,
             CategorySummary category,
             List<TagSummary> tags,
+            String coverOriginalUrl,
             String coverPreviewUrl,
             String coverThumbnailUrl,
             Instant publishedAt,
@@ -50,6 +51,7 @@ public final class PublicCollectionDtos {
             Long id,
             Integer width,
             Integer height,
+            String originalUrl,
             String previewUrl,
             String thumbnailUrl,
             Integer sortOrder

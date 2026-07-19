@@ -26,6 +26,7 @@ public final class PublicProjectDtos {
             String regionCode,
             String locationText,
             String description,
+            String coverOriginalUrl,
             String coverPreviewUrl,
             String coverThumbnailUrl,
             Instant publishedAt

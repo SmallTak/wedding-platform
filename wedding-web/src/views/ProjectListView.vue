@@ -93,7 +93,7 @@ function formatDate(value) {
             class="project-list-item"
           >
             <img
-              :src="project.coverThumbnailUrl || project.coverPreviewUrl || heroImage"
+              :src="project.coverOriginalUrl || heroImage"
               :alt="project.title"
               loading="lazy"
             />

@@ -260,6 +260,7 @@ public class HomepageService {
                         item.description(),
                         item.eventDate(),
                         item.locationText(),
+                        item.originalUrl(),
                         item.previewUrl(),
                         item.thumbnailUrl(),
                         item.width(),
@@ -327,6 +328,7 @@ public class HomepageService {
                 collection.getDescription(),
                 project == null ? null : project.getEventDate(),
                 project == null ? null : project.getLocationText(),
+                publicUrl(asset.getOriginalPath()),
                 publicUrl(asset.getPreviewPath()),
                 publicUrl(asset.getThumbnailPath()),
                 asset.getWidth(),
@@ -351,6 +353,7 @@ public class HomepageService {
                 collection == null ? null : collection.getDescription(),
                 project == null ? null : project.getEventDate(),
                 project == null ? null : project.getLocationText(),
+                asset == null ? null : publicUrlOrNull(asset.getOriginalPath()),
                 asset == null ? null : publicUrlOrNull(asset.getPreviewPath()),
                 asset == null ? null : publicUrlOrNull(asset.getThumbnailPath()),
                 asset == null ? null : asset.getWidth(),
@@ -390,6 +393,7 @@ public class HomepageService {
         if (asset == null
                 || Boolean.TRUE.equals(asset.getDeleted())
                 || !"SUCCESS".equals(asset.getProcessStatus())
+                || asset.getOriginalPath() == null
                 || asset.getPreviewPath() == null
                 || asset.getThumbnailPath() == null) {
             return "ASSET_NOT_AVAILABLE";
