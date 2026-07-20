@@ -50,10 +50,9 @@ public class CollectionController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Long projectId,
             @RequestParam(required = false) Long categoryId
     ) {
-        return collectionService.listCollections(userId(jwt), page, size, keyword, projectId, categoryId);
+        return collectionService.listCollections(userId(jwt), page, size, keyword, categoryId);
     }
 
     @GetMapping("/{collectionId}")

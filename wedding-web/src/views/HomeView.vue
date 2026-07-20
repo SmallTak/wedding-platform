@@ -2,7 +2,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   ArrowUpRight,
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
   Menu,
@@ -23,7 +22,6 @@ const loading = ref(false)
 const loadError = ref('')
 const categories = ref([])
 const collections = ref([])
-const projects = ref([])
 const feedback = ref([])
 const carousel = ref([])
 const currentWorkIndex = ref(0)
@@ -96,13 +94,11 @@ async function loadHomepage() {
   loadError.value = ''
   try {
     const { data } = await publicApi.home()
-    projects.value = data.projects
     collections.value = data.collections
     feedback.value = data.feedback
     carousel.value = data.carousel || []
     startWorkRotation()
   } catch {
-    projects.value = []
     collections.value = []
     feedback.value = []
     carousel.value = []
@@ -153,7 +149,6 @@ async function loadCollections() {
       categoryId: selectedCategoryId.value || undefined,
     })
     collections.value = data.content
-    projects.value = []
     feedback.value = []
   } catch {
     collections.value = []
@@ -251,7 +246,6 @@ function formatDate(value) {
       </RouterLink>
 
       <nav :class="['site-nav', { 'is-open': menuOpen }]" aria-label="主导航">
-        <RouterLink :to="{ name: 'project-list' }" @click="menuOpen = false">婚礼项目</RouterLink>
         <a href="#works" @click="menuOpen = false">婚礼作品</a>
         <a href="#categories" @click="menuOpen = false">作品分类</a>
         <RouterLink :to="{ name: 'reviews' }" @click="menuOpen = false">客户评价</RouterLink>
@@ -261,7 +255,7 @@ function formatDate(value) {
       <div class="header-actions">
         <RouterLink
           class="icon-button"
-          :to="{ name: 'customer-projects' }"
+          :to="{ name: 'customer-feedback' }"
           aria-label="客户中心"
           title="客户中心"
         >
@@ -314,38 +308,6 @@ function formatDate(value) {
         </div>
       </section>
 
-      <section v-if="projects.length" class="content-section homepage-projects">
-        <div class="section-heading">
-          <div>
-            <p class="section-kicker">Featured weddings</p>
-            <h2>推荐婚礼项目</h2>
-          </div>
-          <RouterLink class="text-link" :to="{ name: 'project-list' }">
-            查看全部
-            <ArrowUpRight :size="17" />
-          </RouterLink>
-        </div>
-        <div class="homepage-project-grid">
-          <RouterLink
-            v-for="project in projects"
-            :key="project.id"
-            :to="{ name: 'project-detail', params: { projectId: project.id } }"
-            class="homepage-project-item"
-          >
-            <img
-              :src="project.coverThumbnailUrl || project.coverPreviewUrl || project.coverOriginalUrl || heroImage"
-              :alt="project.title"
-              loading="lazy"
-            />
-            <div>
-              <span><CalendarDays :size="14" />{{ formatDate(project.eventDate) }}</span>
-              <h3>{{ project.title }}</h3>
-              <p>{{ project.locationText }}</p>
-            </div>
-          </RouterLink>
-        </div>
-      </section>
-
       <section
         v-if="loading || loadError || isFilteringWorks || workSlides.length"
         id="works"
@@ -384,7 +346,7 @@ function formatDate(value) {
                 <p>{{ work.category?.name || '婚礼作品' }}</p>
                 <h3>{{ work.title }}</h3>
               </div>
-              <span>{{ work.project?.locationText || work.creators.map((creator) => creator.displayName).join('、') }}</span>
+              <span>{{ work.locationText || work.creators.map((creator) => creator.displayName).join('、') }}</span>
             </div>
           </RouterLink>
         </div>
@@ -402,7 +364,7 @@ function formatDate(value) {
         >
           <RouterLink
             v-for="(slide, index) in workSlides"
-            :key="slide.collectionId"
+            :key="slide.photoId"
             :to="{ name: 'collection-detail', params: { collectionId: slide.collectionId } }"
             :class="['work-carousel-slide', { active: index === currentWorkIndex }]"
             :aria-hidden="index === currentWorkIndex ? undefined : 'true'"
@@ -430,7 +392,7 @@ function formatDate(value) {
             <div class="work-carousel-dots">
               <button
                 v-for="(slide, index) in workSlides"
-                :key="slide.collectionId"
+                :key="slide.photoId"
                 type="button"
                 :class="{ active: index === currentWorkIndex }"
                 :aria-label="`显示第 ${index + 1} 个作品`"
@@ -482,7 +444,7 @@ function formatDate(value) {
             <p>“{{ item.content }}”</p>
             <footer>
               <strong>{{ item.customerDisplayName }}</strong>
-              <span>{{ item.projectTitle }} · {{ item.creatorDisplayName }}</span>
+              <span>{{ item.collectionTitle }} · {{ item.creatorDisplayName }}</span>
             </footer>
             <div v-if="item.reply" class="public-feedback-reply">
               <span>创作者回复</span>

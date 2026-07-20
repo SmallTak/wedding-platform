@@ -1,22 +1,18 @@
 package com.wedding.platform.content.review.application;
 
-import com.wedding.platform.content.collection.persistence.entity.CollectionTag;
 import com.wedding.platform.content.collection.persistence.entity.CollectionCreator;
+import com.wedding.platform.content.collection.persistence.entity.CollectionTag;
 import com.wedding.platform.content.collection.persistence.entity.ContentCategory;
 import com.wedding.platform.content.collection.persistence.entity.ContentTag;
 import com.wedding.platform.content.collection.persistence.entity.WorkCollection;
-import com.wedding.platform.content.collection.persistence.repository.CollectionTagRepository;
 import com.wedding.platform.content.collection.persistence.repository.CollectionCreatorRepository;
+import com.wedding.platform.content.collection.persistence.repository.CollectionTagRepository;
 import com.wedding.platform.content.collection.persistence.repository.ContentCategoryRepository;
 import com.wedding.platform.content.collection.persistence.repository.ContentTagRepository;
 import com.wedding.platform.content.media.persistence.entity.CollectionPhoto;
 import com.wedding.platform.content.media.persistence.entity.MediaAsset;
 import com.wedding.platform.content.media.persistence.repository.CollectionPhotoRepository;
 import com.wedding.platform.content.media.persistence.repository.MediaAssetRepository;
-import com.wedding.platform.content.project.persistence.entity.WeddingProject;
-import com.wedding.platform.content.project.persistence.entity.ProjectCreator;
-import com.wedding.platform.content.project.persistence.repository.ProjectCreatorRepository;
-import com.wedding.platform.content.project.persistence.repository.WeddingProjectRepository;
 import com.wedding.platform.content.review.persistence.entity.ReviewActionLog;
 import com.wedding.platform.content.review.persistence.entity.ReviewItem;
 import com.wedding.platform.content.review.persistence.entity.ReviewItemStatus;
@@ -42,7 +38,6 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -54,33 +49,25 @@ import java.util.stream.Collectors;
 @Service
 public class ReviewRevisionService {
 
-    public static final List<String> PROJECT_FIELD_KEYS = List.of(
+    public static final List<String> COLLECTION_FIELD_KEYS = List.of(
             "TITLE",
-            "COUPLE_DISPLAY_NAME",
             "EVENT_DATE",
             "REGION_CODE",
             "LOCATION_TEXT",
-            "DESCRIPTION"
-    );
-
-    public static final List<String> COLLECTION_FIELD_KEYS = List.of(
-            "PROJECT",
-            "TITLE",
             "DESCRIPTION",
             "CATEGORY",
             "TAGS",
-            "COVER"
+            "COVER",
+            "CREATORS"
     );
 
     private static final Map<String, String> FIELD_LABELS = Map.ofEntries(
             Map.entry("TITLE", "标题"),
-            Map.entry("COUPLE_DISPLAY_NAME", "新人展示名称"),
-            Map.entry("EVENT_DATE", "婚礼日期"),
+            Map.entry("EVENT_DATE", "拍摄日期"),
             Map.entry("REGION_CODE", "地区编码"),
-            Map.entry("LOCATION_TEXT", "婚礼地点"),
+            Map.entry("LOCATION_TEXT", "拍摄地点"),
             Map.entry("DESCRIPTION", "内容介绍"),
-            Map.entry("CREATORS", "参与创作者"),
-            Map.entry("PROJECT", "关联婚礼项目"),
+            Map.entry("CREATORS", "共同创作者"),
             Map.entry("CATEGORY", "主分类"),
             Map.entry("TAGS", "内容标签"),
             Map.entry("COVER", "作品集封面")
@@ -89,11 +76,9 @@ public class ReviewRevisionService {
     private final ReviewTaskRepository taskRepository;
     private final ReviewItemRepository itemRepository;
     private final ReviewActionLogRepository actionRepository;
-    private final WeddingProjectRepository projectRepository;
     private final ContentCategoryRepository categoryRepository;
     private final ContentTagRepository tagRepository;
     private final CollectionTagRepository collectionTagRepository;
-    private final ProjectCreatorRepository projectCreatorRepository;
     private final CollectionCreatorRepository collectionCreatorRepository;
     private final SystemUserRepository userRepository;
     private final CollectionPhotoRepository photoRepository;
@@ -104,11 +89,9 @@ public class ReviewRevisionService {
             ReviewTaskRepository taskRepository,
             ReviewItemRepository itemRepository,
             ReviewActionLogRepository actionRepository,
-            WeddingProjectRepository projectRepository,
             ContentCategoryRepository categoryRepository,
             ContentTagRepository tagRepository,
             CollectionTagRepository collectionTagRepository,
-            ProjectCreatorRepository projectCreatorRepository,
             CollectionCreatorRepository collectionCreatorRepository,
             SystemUserRepository userRepository,
             CollectionPhotoRepository photoRepository,
@@ -118,28 +101,14 @@ public class ReviewRevisionService {
         this.taskRepository = taskRepository;
         this.itemRepository = itemRepository;
         this.actionRepository = actionRepository;
-        this.projectRepository = projectRepository;
         this.categoryRepository = categoryRepository;
         this.tagRepository = tagRepository;
         this.collectionTagRepository = collectionTagRepository;
-        this.projectCreatorRepository = projectCreatorRepository;
         this.collectionCreatorRepository = collectionCreatorRepository;
         this.userRepository = userRepository;
         this.photoRepository = photoRepository;
         this.assetRepository = assetRepository;
         this.objectMapper = objectMapper;
-    }
-
-    @Transactional
-    public ReviewTask submitProject(WeddingProject project, Long operatorId) {
-        ensureProjectBaseline(project);
-        return createSubmission(
-                ReviewTargetType.PROJECT,
-                project.getId(),
-                operatorId,
-                projectSnapshots(project),
-                List.of()
-        );
     }
 
     @Transactional
@@ -160,26 +129,6 @@ public class ReviewRevisionService {
                 operatorId,
                 collectionSnapshots(collection),
                 photoSnapshots
-        );
-    }
-
-    @Transactional
-    public void ensureProjectBaseline(WeddingProject project) {
-        if (taskRepository.findTopByTargetTypeAndTargetIdOrderByRevisionNoDesc(
-                ReviewTargetType.PROJECT, project.getId()).isPresent()
-                || ReviewStatus.DRAFT == project.getReviewStatus()) {
-            return;
-        }
-        ReviewItemStatus fieldStatus = aggregateBaselineStatus(project.getReviewStatus());
-        createBaseline(
-                ReviewTargetType.PROJECT,
-                project.getId(),
-                project.getUpdatedBy(),
-                project.getSubmittedAt() == null ? project.getUpdatedAt() : project.getSubmittedAt(),
-                projectSnapshots(project),
-                List.of(),
-                fieldStatus,
-                taskStatus(project.getReviewStatus())
         );
     }
 
@@ -487,7 +436,7 @@ public class ReviewRevisionService {
         }
         itemRepository.saveAll(items);
         recordAction(task.getId(), null, "CREATE_BASELINE", operatorId,
-                "Created review baseline for pre-V7 content");
+                "Created review baseline for existing content");
     }
 
     private ReviewItem baselineItem(
@@ -574,38 +523,12 @@ public class ReviewRevisionService {
         taskRepository.save(task);
     }
 
-    private Map<String, Snapshot> projectSnapshots(WeddingProject project) {
-        Map<String, Snapshot> values = new LinkedHashMap<>();
-        values.put("TITLE", snapshot(project.getTitle(), project.getTitle()));
-        values.put("COUPLE_DISPLAY_NAME", snapshot(
-                project.getCoupleDisplayName(), display(project.getCoupleDisplayName())));
-        values.put("EVENT_DATE", snapshot(project.getEventDate(), project.getEventDate().toString()));
-        values.put("REGION_CODE", snapshot(project.getRegionCode(), project.getRegionCode()));
-        values.put("LOCATION_TEXT", snapshot(project.getLocationText(), project.getLocationText()));
-        values.put("DESCRIPTION", snapshot(project.getDescription(), display(project.getDescription())));
-        values.put("CREATORS", creatorSnapshot(
-                projectCreatorRepository.findAllByProjectId(project.getId()).stream()
-                        .map(ProjectCreator::getId)
-                        .map(id -> id.getCreatorUserId())
-                        .toList()
-        ));
-        return values;
-    }
-
     private Map<String, Snapshot> collectionSnapshots(WorkCollection collection) {
         Map<String, Snapshot> values = new LinkedHashMap<>();
-        WeddingProject project = collection.getProjectId() == null
-                ? null
-                : projectRepository.findById(collection.getProjectId()).orElse(null);
-        values.put("PROJECT", snapshot(
-                project == null ? null : Map.of(
-                        "id", project.getId(),
-                        "projectCode", project.getProjectCode(),
-                        "title", project.getTitle()
-                ),
-                project == null ? "独立作品集" : project.getProjectCode() + " · " + project.getTitle()
-        ));
         values.put("TITLE", snapshot(collection.getTitle(), collection.getTitle()));
+        values.put("EVENT_DATE", snapshot(collection.getEventDate(), display(collection.getEventDate())));
+        values.put("REGION_CODE", snapshot(collection.getRegionCode(), display(collection.getRegionCode())));
+        values.put("LOCATION_TEXT", snapshot(collection.getLocationText(), display(collection.getLocationText())));
         values.put("DESCRIPTION", snapshot(
                 collection.getDescription(), display(collection.getDescription())));
 
@@ -737,10 +660,18 @@ public class ReviewRevisionService {
 
     private ReviewItemStatus collectionFieldBaselineStatus(WorkCollection collection) {
         if (ReviewStatus.PARTIALLY_REJECTED == collection.getReviewStatus()
-                && !StringUtils.hasText(collection.getRejectionReason())) {
-            return ReviewItemStatus.APPROVED;
+                || ReviewStatus.REJECTED == collection.getReviewStatus()) {
+            return ReviewItemStatus.REJECTED;
         }
         return aggregateBaselineStatus(collection.getReviewStatus());
+    }
+
+    private ReviewItemStatus photoStatus(ReviewStatus status) {
+        return switch (status) {
+            case APPROVED -> ReviewItemStatus.APPROVED;
+            case REJECTED, PARTIALLY_REJECTED -> ReviewItemStatus.REJECTED;
+            default -> ReviewItemStatus.PENDING;
+        };
     }
 
     private ReviewTaskStatus taskStatus(ReviewStatus status) {
@@ -751,61 +682,49 @@ public class ReviewRevisionService {
         };
     }
 
-    private ReviewItemStatus photoStatus(ReviewStatus status) {
-        return switch (status) {
-            case APPROVED -> ReviewItemStatus.APPROVED;
-            case REJECTED, PARTIALLY_REJECTED -> ReviewItemStatus.REJECTED;
-            case DRAFT -> ReviewItemStatus.REMOVED;
-            default -> ReviewItemStatus.PENDING;
-        };
-    }
-
-    private String display(String value) {
-        return StringUtils.hasText(value) ? value.trim() : "未填写";
-    }
-
-    private String displayValue(String snapshotJson) {
-        try {
-            JsonNode root = objectMapper.readTree(snapshotJson);
-            JsonNode display = root.get("display");
-            return display == null || display.isNull() ? "未填写" : display.asText();
-        } catch (Exception exception) {
-            return snapshotJson;
-        }
-    }
-
-    private boolean sameSnapshotValue(String currentJson, String candidateJson) {
-        try {
-            JsonNode current = objectMapper.readTree(currentJson).get("value");
-            JsonNode candidate = objectMapper.readTree(candidateJson).get("value");
-            return current != null && current.equals(candidate);
-        } catch (Exception exception) {
-            return currentJson.equals(candidateJson);
-        }
-    }
-
-    private String json(Object value) {
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (Exception exception) {
-            throw new IllegalStateException("Could not serialize review snapshot", exception);
-        }
-    }
-
-    private void recordAction(
-            Long taskId,
-            Long itemId,
-            String action,
-            Long operatorId,
-            String reason
-    ) {
+    private void recordAction(Long taskId, Long itemId, String action, Long operatorId, String reason) {
         ReviewActionLog log = new ReviewActionLog();
         log.setTaskId(taskId);
         log.setReviewItemId(itemId);
         log.setAction(action);
         log.setOperatorId(operatorId);
         log.setReason(reason);
+        log.setCreatedAt(Instant.now());
         actionRepository.save(log);
+    }
+
+    private String json(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception exception) {
+            throw new IllegalStateException("Review snapshot could not be serialized", exception);
+        }
+    }
+
+    private boolean sameSnapshotValue(String leftJson, String rightJson) {
+        try {
+            JsonNode left = objectMapper.readTree(leftJson).get("value");
+            JsonNode right = objectMapper.readTree(rightJson).get("value");
+            if (left == null || right == null) {
+                return false;
+            }
+            return left.equals(right);
+        } catch (Exception exception) {
+            return false;
+        }
+    }
+
+    private String displayValue(String snapshotJson) {
+        try {
+            JsonNode display = objectMapper.readTree(snapshotJson).get("display");
+            return display == null || display.isNull() ? "" : display.asText();
+        } catch (Exception exception) {
+            return "";
+        }
+    }
+
+    private String display(Object value) {
+        return value == null ? "未填写" : String.valueOf(value);
     }
 
     private record Snapshot(Map<String, Object> payload) {

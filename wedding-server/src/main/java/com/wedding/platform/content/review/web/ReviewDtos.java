@@ -2,7 +2,6 @@ package com.wedding.platform.content.review.web;
 
 import com.wedding.platform.content.collection.web.CollectionDtos;
 import com.wedding.platform.content.media.web.PhotoDtos;
-import com.wedding.platform.content.project.web.ProjectDtos;
 import com.wedding.platform.content.review.persistence.entity.ReviewItemStatus;
 import com.wedding.platform.content.review.persistence.entity.ReviewItemType;
 import com.wedding.platform.content.review.persistence.entity.ReviewTargetType;
@@ -96,28 +95,7 @@ public final class ReviewDtos {
     ) {
     }
 
-    public record PublishProjectRequest(
-            @NotNull(message = "Version is required")
-            @PositiveOrZero(message = "Version must not be negative")
-            Long version,
-            @NotNull(message = "Visibility is required")
-            ContentVisibility visibility,
-            @Size(max = 64, message = "Access password is too long")
-            String accessPassword
-    ) {
-    }
-
     public record OfflineCollectionRequest(
-            @NotNull(message = "Version is required")
-            @PositiveOrZero(message = "Version must not be negative")
-            Long version,
-            @NotBlank(message = "Offline reason is required")
-            @Size(max = 500, message = "Offline reason is too long")
-            String reason
-    ) {
-    }
-
-    public record OfflineProjectRequest(
             @NotNull(message = "Version is required")
             @PositiveOrZero(message = "Version must not be negative")
             Long version,
@@ -164,12 +142,6 @@ public final class ReviewDtos {
     ) {
     }
 
-    public record ProjectReviewDetailResponse(
-            ProjectDtos.ProjectResponse project,
-            ReviewHistoryResponse reviewHistory
-    ) {
-    }
-
     public record ReviewItemResponse(
             Long id,
             ReviewItemType itemType,
@@ -202,32 +174,6 @@ public final class ReviewDtos {
     public record ReviewHistoryResponse(
             List<ReviewItemResponse> currentItems,
             List<ReviewRevisionResponse> revisions
-    ) {
-    }
-
-    public record ProjectReviewQueueItem(
-            Long id,
-            String projectCode,
-            String title,
-            String locationText,
-            ReviewStatus reviewStatus,
-            PublishStatus publishStatus,
-            String rejectionReason,
-            Instant submittedAt,
-            Instant updatedAt,
-            Long version,
-            long pendingFields,
-            long rejectedFields,
-            long approvedFields
-    ) {
-    }
-
-    public record ProjectReviewQueueResponse(
-            List<ProjectReviewQueueItem> content,
-            int page,
-            int size,
-            long totalElements,
-            int totalPages
     ) {
     }
 

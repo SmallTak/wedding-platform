@@ -14,14 +14,11 @@ import com.wedding.platform.content.media.persistence.entity.CollectionPhoto;
 import com.wedding.platform.content.media.persistence.entity.MediaAsset;
 import com.wedding.platform.content.media.persistence.repository.CollectionPhotoRepository;
 import com.wedding.platform.content.media.persistence.repository.MediaAssetRepository;
-import com.wedding.platform.content.project.persistence.entity.WeddingProject;
-import com.wedding.platform.content.project.persistence.repository.WeddingProjectRepository;
-import com.wedding.platform.content.publication.web.PublicCollectionDtos;
 import com.wedding.platform.content.publication.web.PublicAccessDtos;
+import com.wedding.platform.content.publication.web.PublicCollectionDtos;
 import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
 import com.wedding.platform.content.shared.ReviewStatus;
-import com.wedding.platform.platform.file.BrandedImagePathResolver;
 import com.wedding.platform.platform.web.ApiException;
 import com.wedding.platform.system.account.persistence.entity.ProfessionalRole;
 import com.wedding.platform.system.account.persistence.entity.SystemUser;
@@ -52,10 +49,8 @@ public class PublicCollectionService {
     private final CollectionCreatorRepository collectionCreatorRepository;
     private final CollectionPhotoRepository photoRepository;
     private final MediaAssetRepository assetRepository;
-    private final WeddingProjectRepository projectRepository;
     private final SystemUserRepository userRepository;
     private final PublicContentAccessService contentAccessService;
-    private final BrandedImagePathResolver brandedImagePathResolver;
 
     public PublicCollectionService(
             WorkCollectionRepository collectionRepository,
@@ -65,10 +60,8 @@ public class PublicCollectionService {
             CollectionCreatorRepository collectionCreatorRepository,
             CollectionPhotoRepository photoRepository,
             MediaAssetRepository assetRepository,
-            WeddingProjectRepository projectRepository,
             SystemUserRepository userRepository,
-            PublicContentAccessService contentAccessService,
-            BrandedImagePathResolver brandedImagePathResolver
+            PublicContentAccessService contentAccessService
     ) {
         this.collectionRepository = collectionRepository;
         this.categoryRepository = categoryRepository;
@@ -77,10 +70,8 @@ public class PublicCollectionService {
         this.collectionCreatorRepository = collectionCreatorRepository;
         this.photoRepository = photoRepository;
         this.assetRepository = assetRepository;
-        this.projectRepository = projectRepository;
         this.userRepository = userRepository;
         this.contentAccessService = contentAccessService;
-        this.brandedImagePathResolver = brandedImagePathResolver;
     }
 
     @Transactional(readOnly = true)
@@ -181,7 +172,7 @@ public class PublicCollectionService {
                             photo.getId(),
                             asset.getWidth(),
                             asset.getHeight(),
-                            brandedImagePathResolver.publicUrl(asset.getOriginalPath()),
+                            originalImageUrl(photo.getId()),
                             publicUrl(asset.getPreviewPath()),
                             publicUrl(asset.getThumbnailPath()),
                             photo.getSortOrder()
@@ -211,29 +202,6 @@ public class PublicCollectionService {
                 request.password(),
                 clientAddress
         );
-    }
-
-    @Transactional(readOnly = true)
-    public List<PublicCollectionDtos.CollectionSummary> projectCollections(Long projectId) {
-        return collectionRepository.findPublishedCollectionsByProject(
-                        projectId,
-                        PublishStatus.PUBLISHED,
-                        ContentVisibility.PUBLIC)
-                .stream()
-                .map(this::toSummary)
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
-    public PublicCollectionDtos.CollectionSummary firstProjectCollection(Long projectId) {
-        return collectionRepository.findPublishedCollectionsByProject(
-                        projectId,
-                        PublishStatus.PUBLISHED,
-                        ContentVisibility.PUBLIC)
-                .stream()
-                .findFirst()
-                .map(this::toSummary)
-                .orElse(null);
     }
 
     private PublicCollectionDtos.CollectionSummary toSummary(WorkCollection collection) {
@@ -289,7 +257,7 @@ public class PublicCollectionService {
             if (cover != null) {
                 MediaAsset asset = assetRepository.findById(cover.getAssetId()).orElse(null);
                 if (asset != null) {
-                    coverOriginalUrl = brandedImagePathResolver.publicUrl(asset.getOriginalPath());
+                    coverOriginalUrl = originalImageUrl(cover.getId());
                     coverPreviewUrl = publicUrl(asset.getPreviewPath());
                     coverThumbnailUrl = publicUrl(asset.getThumbnailPath());
                 }
@@ -300,6 +268,9 @@ public class PublicCollectionService {
                 collection.getId(),
                 collection.getTitle(),
                 collection.getDescription(),
+                collection.getEventDate(),
+                collection.getRegionCode(),
+                collection.getLocationText(),
                 categorySummary,
                 tags,
                 coverOriginalUrl,
@@ -308,26 +279,7 @@ public class PublicCollectionService {
                 collection.getPublishedAt(),
                 collection.getFeatured(),
                 collection.getPinned(),
-                creators,
-                publicProject(collection.getProjectId())
-        );
-    }
-
-    private PublicCollectionDtos.ProjectSummary publicProject(Long projectId) {
-        if (projectId == null) {
-            return null;
-        }
-        WeddingProject project = projectRepository.findByIdAndDeletedFalse(projectId).orElse(null);
-        if (project == null
-                || PublishStatus.PUBLISHED != project.getPublishStatus()
-                || ContentVisibility.PUBLIC != project.getVisibility()) {
-            return null;
-        }
-        return new PublicCollectionDtos.ProjectSummary(
-                project.getId(),
-                project.getTitle(),
-                project.getEventDate(),
-                project.getLocationText()
+                creators
         );
     }
 
@@ -337,6 +289,10 @@ public class PublicCollectionService {
 
     private String publicUrl(String relativePath) {
         return "/media/" + relativePath.replace('\\', '/');
+    }
+
+    private String originalImageUrl(Long photoId) {
+        return "/api/public/images/photos/" + photoId + "/original";
     }
 
     private void requireAccess(WorkCollection collection, String accessToken) {

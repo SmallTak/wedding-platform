@@ -17,25 +17,22 @@ public interface WorkCollectionRepository extends JpaRepository<WorkCollection, 
 
     Optional<WorkCollection> findByIdAndDeletedFalse(Long id);
 
-    boolean existsByProjectIdAndDeletedFalse(Long projectId);
-
     boolean existsByCategoryIdAndDeletedFalse(Long categoryId);
 
     @Query("""
             SELECT work
             FROM WorkCollection work
             WHERE work.deleted = false
-              AND (:projectId IS NULL OR work.projectId = :projectId)
               AND (:categoryId IS NULL OR work.categoryId = :categoryId)
               AND (
                 :keyword IS NULL
                 OR LOWER(work.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
                 OR LOWER(work.description) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                OR LOWER(work.locationText) LIKE LOWER(CONCAT('%', :keyword, '%'))
               )
             ORDER BY work.createdAt DESC
             """)
     Page<WorkCollection> findAllCollections(
-            @Param("projectId") Long projectId,
             @Param("categoryId") Long categoryId,
             @Param("keyword") String keyword,
             Pageable pageable
@@ -54,18 +51,17 @@ public interface WorkCollectionRepository extends JpaRepository<WorkCollection, 
                       AND creator.id.creatorUserId = :userId
                 )
               )
-              AND (:projectId IS NULL OR work.projectId = :projectId)
               AND (:categoryId IS NULL OR work.categoryId = :categoryId)
               AND (
                 :keyword IS NULL
                 OR LOWER(work.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
                 OR LOWER(work.description) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                OR LOWER(work.locationText) LIKE LOWER(CONCAT('%', :keyword, '%'))
               )
             ORDER BY work.createdAt DESC
             """)
     Page<WorkCollection> findAccessibleCollections(
             @Param("userId") Long userId,
-            @Param("projectId") Long projectId,
             @Param("categoryId") Long categoryId,
             @Param("keyword") String keyword,
             Pageable pageable
@@ -81,6 +77,7 @@ public interface WorkCollectionRepository extends JpaRepository<WorkCollection, 
                 :keyword IS NULL
                 OR LOWER(work.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
                 OR LOWER(work.description) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                OR LOWER(work.locationText) LIKE LOWER(CONCAT('%', :keyword, '%'))
               )
             ORDER BY
               CASE WHEN work.reviewStatus = :pendingStatus THEN 0
@@ -111,6 +108,7 @@ public interface WorkCollectionRepository extends JpaRepository<WorkCollection, 
                 :keyword IS NULL
                 OR LOWER(work.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
                 OR LOWER(work.description) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                OR LOWER(work.locationText) LIKE LOWER(CONCAT('%', :keyword, '%'))
               )
             ORDER BY work.pinned DESC, work.sortOrder ASC, work.publishedAt DESC, work.id DESC
             """)
@@ -162,21 +160,6 @@ public interface WorkCollectionRepository extends JpaRepository<WorkCollection, 
             @Param("publishStatus") PublishStatus publishStatus,
             @Param("visibility") ContentVisibility visibility,
             Pageable pageable
-    );
-
-    @Query("""
-            SELECT work
-            FROM WorkCollection work
-            WHERE work.deleted = false
-              AND work.projectId = :projectId
-              AND work.publishStatus = :publishStatus
-              AND work.visibility = :visibility
-            ORDER BY work.pinned DESC, work.sortOrder ASC, work.publishedAt DESC, work.id DESC
-            """)
-    List<WorkCollection> findPublishedCollectionsByProject(
-            @Param("projectId") Long projectId,
-            @Param("publishStatus") PublishStatus publishStatus,
-            @Param("visibility") ContentVisibility visibility
     );
 
     List<WorkCollection> findTop5ByDeletedFalseAndReviewStatusInOrderBySubmittedAtDescUpdatedAtDesc(

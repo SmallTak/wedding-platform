@@ -309,96 +309,6 @@ class CollectionFlowTests {
                 .andExpect(jsonPath("$.totalElements").value(0));
     }
 
-    @Test
-    void linkedCollectionCreatorsMustParticipateInProject() throws Exception {
-        String adminToken = login(ADMIN_MOBILE);
-        String ownerToken = login(OWNER_MOBILE);
-
-        String projectJson = mockMvc.perform(post("/api/projects")
-                        .header("Authorization", bearer(ownerToken))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "title": "Linked Collection Project",
-                                  "eventDate": "2026-11-11",
-                                  "regionCode": "330100",
-                                  "locationText": "Hangzhou"
-                                }
-                                """))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-        Number projectId = JsonPath.read(projectJson, "$.id");
-        Number projectVersion = JsonPath.read(projectJson, "$.version");
-
-        String collectionJson = mockMvc.perform(post("/api/collections")
-                        .header("Authorization", bearer(ownerToken))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(createCollectionRequest(
-                                projectId.longValue(),
-                                "Linked Wedding Story",
-                                category.getId(),
-                                primaryTag.getId()
-                        )))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.project.id").value(projectId.longValue()))
-                .andReturn().getResponse().getContentAsString();
-        Number collectionId = JsonPath.read(collectionJson, "$.id");
-        Number collectionVersion = JsonPath.read(collectionJson, "$.version");
-
-        String assignCollectionRequest = """
-                {
-                  "version": %d,
-                  "creatorUserIds": [%d]
-                }
-                """.formatted(collectionVersion.longValue(), collaborator.getId());
-        mockMvc.perform(put("/api/admin/collections/{collectionId}/creators", collectionId.longValue())
-                        .header("Authorization", bearer(adminToken))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(assignCollectionRequest))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("COLLECTION_CREATOR_NOT_IN_PROJECT"));
-
-        String assignedProjectJson = mockMvc.perform(put(
-                                "/api/admin/projects/{projectId}/creators", projectId.longValue())
-                        .header("Authorization", bearer(adminToken))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "version": %d,
-                                  "creatorUserIds": [%d]
-                                }
-                                """.formatted(projectVersion.longValue(), collaborator.getId())))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
-        Number assignedProjectVersion = JsonPath.read(assignedProjectJson, "$.version");
-
-        String assignedCollectionJson = mockMvc.perform(put(
-                                "/api/admin/collections/{collectionId}/creators", collectionId.longValue())
-                        .header("Authorization", bearer(adminToken))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(assignCollectionRequest))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.creators.length()").value(2))
-                .andReturn().getResponse().getContentAsString();
-        Number assignedCollectionVersion = JsonPath.read(assignedCollectionJson, "$.version");
-
-        mockMvc.perform(delete("/api/projects/{projectId}", projectId.longValue())
-                        .header("Authorization", bearer(ownerToken))
-                        .param("version", assignedProjectVersion.toString()))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("PROJECT_COLLECTIONS_EXIST"));
-
-        mockMvc.perform(delete("/api/collections/{collectionId}", collectionId.longValue())
-                        .header("Authorization", bearer(ownerToken))
-                        .param("version", assignedCollectionVersion.toString()))
-                .andExpect(status().isNoContent());
-
-        mockMvc.perform(delete("/api/projects/{projectId}", projectId.longValue())
-                        .header("Authorization", bearer(ownerToken))
-                        .param("version", assignedProjectVersion.toString()))
-                .andExpect(status().isNoContent());
-    }
-
     private SystemUser ensureAccount(String mobile, String accountType, String displayName) {
         SystemUser user = userRepository.findByMobileAndDeletedFalse(mobile).orElseGet(() -> {
             SystemRole role = roleRepository.findByCodeAndStatus(accountType, "ACTIVE").orElseThrow();
@@ -451,16 +361,14 @@ class CollectionFlowTests {
     }
 
     private String createCollectionRequest(Long projectId, String title, Long categoryId, Long tagId) {
-        String projectField = projectId == null ? "null" : projectId.toString();
         return """
                 {
-                  "projectId": %s,
                   "title": "%s",
                   "description": "A complete wedding story",
                   "categoryId": %d,
                   "tagIds": [%d]
                 }
-                """.formatted(projectField, title, categoryId, tagId);
+                """.formatted(title, categoryId, tagId);
     }
 
     private String updateCollectionRequest(
@@ -470,20 +378,18 @@ class CollectionFlowTests {
             Long categoryId,
             Long... tagIds
     ) {
-        String projectField = projectId == null ? "null" : projectId.toString();
         String tags = java.util.Arrays.stream(tagIds)
                 .map(String::valueOf)
                 .collect(java.util.stream.Collectors.joining(","));
         return """
                 {
                   "version": %d,
-                  "projectId": %s,
                   "title": "%s",
                   "description": "Updated collaborative wedding story",
                   "categoryId": %d,
                   "tagIds": [%s]
                 }
-                """.formatted(version, projectField, title, categoryId, tags);
+                """.formatted(version, title, categoryId, tags);
     }
 
     private String login(String mobile) throws Exception {

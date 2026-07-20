@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { ChevronRight, Clock3, RefreshCw, Rocket, ShieldCheck } from '@lucide/vue'
-import { collectionApi, projectApi, reviewApi } from '../api/content'
+import { collectionApi, reviewApi } from '../api/content'
 import { useAuthStore } from '../stores/auth'
 import {
   apiErrorMessage,
@@ -60,9 +60,8 @@ async function loadOverview() {
       const { data } = await reviewApi.dashboard()
       overview.value = data
     } else {
-      const [collectionsResponse, projectsResponse] = await Promise.all([
+      const [collectionsResponse] = await Promise.all([
         collectionApi.list({ page: 0, size: 100 }),
-        projectApi.list({ page: 0, size: 1 }),
       ])
       const collections = collectionsResponse.data.content
       overview.value = {
@@ -82,7 +81,6 @@ async function loadOverview() {
           rejectedPhotos: 0,
           approvedPhotos: 0,
         })),
-        projectCount: projectsResponse.data.totalElements,
       }
     }
   } catch (error) {

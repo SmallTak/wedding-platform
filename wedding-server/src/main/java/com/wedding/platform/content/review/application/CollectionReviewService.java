@@ -10,7 +10,6 @@ import com.wedding.platform.content.media.persistence.entity.CollectionPhoto;
 import com.wedding.platform.content.media.persistence.entity.MediaAsset;
 import com.wedding.platform.content.media.persistence.repository.CollectionPhotoRepository;
 import com.wedding.platform.content.media.persistence.repository.MediaAssetRepository;
-import com.wedding.platform.content.project.persistence.repository.WeddingProjectRepository;
 import com.wedding.platform.content.publication.application.PublicContentAccessService;
 import com.wedding.platform.content.review.web.ReviewDtos;
 import com.wedding.platform.content.review.persistence.entity.ReviewItem;
@@ -49,7 +48,6 @@ public class CollectionReviewService {
     private final CollectionPhotoRepository photoRepository;
     private final MediaAssetRepository assetRepository;
     private final ContentCategoryRepository categoryRepository;
-    private final WeddingProjectRepository projectRepository;
     private final SystemUserRepository userRepository;
     private final com.wedding.platform.content.collection.persistence.repository.CollectionCreatorRepository
             collectionCreatorRepository;
@@ -65,7 +63,6 @@ public class CollectionReviewService {
             CollectionPhotoRepository photoRepository,
             MediaAssetRepository assetRepository,
             ContentCategoryRepository categoryRepository,
-            WeddingProjectRepository projectRepository,
             SystemUserRepository userRepository,
             com.wedding.platform.content.collection.persistence.repository.CollectionCreatorRepository
                     collectionCreatorRepository,
@@ -80,7 +77,6 @@ public class CollectionReviewService {
         this.photoRepository = photoRepository;
         this.assetRepository = assetRepository;
         this.categoryRepository = categoryRepository;
-        this.projectRepository = projectRepository;
         this.userRepository = userRepository;
         this.collectionCreatorRepository = collectionCreatorRepository;
         this.collectionService = collectionService;
@@ -510,10 +506,8 @@ public class CollectionReviewService {
                 .map(this::toQueueItem)
                 .toList();
         return new ReviewDtos.DashboardOverviewResponse(
-                collectionRepository.countByDeletedFalseAndReviewStatus(ReviewStatus.PENDING)
-                        + projectRepository.countByDeletedFalseAndReviewStatus(ReviewStatus.PENDING),
-                collectionRepository.countByDeletedFalseAndReviewStatus(ReviewStatus.PARTIALLY_REJECTED)
-                        + projectRepository.countByDeletedFalseAndReviewStatus(ReviewStatus.PARTIALLY_REJECTED),
+                collectionRepository.countByDeletedFalseAndReviewStatus(ReviewStatus.PENDING),
+                collectionRepository.countByDeletedFalseAndReviewStatus(ReviewStatus.PARTIALLY_REJECTED),
                 collectionRepository.countByDeletedFalseAndPublishStatus(PublishStatus.READY),
                 collectionRepository.countByDeletedFalseAndPublishStatus(PublishStatus.PUBLISHED),
                 recent

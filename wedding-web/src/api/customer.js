@@ -50,33 +50,9 @@ export const customerAccountApi = {
   },
 }
 
-export const customerProjectApi = {
-  applications() {
-    return http.get('/customer/projects/applications')
-  },
-  linked() {
-    return http.get('/customer/projects/linked')
-  },
-  apply(payload) {
-    return http.post('/customer/projects/applications', payload)
-  },
-}
-
 export const customerFeedbackApi = {
   list(params = {}) {
     return http.get('/customer/feedback', { params })
-  },
-  options() {
-    return http.get('/customer/feedback/options')
-  },
-  create(payload) {
-    return http.post('/customer/feedback', payload)
-  },
-  update(feedbackId, payload) {
-    return http.put(`/customer/feedback/${feedbackId}`, payload)
-  },
-  withdraw(feedbackId, version) {
-    return http.delete(`/customer/feedback/${feedbackId}`, { params: { version } })
   },
 }
 

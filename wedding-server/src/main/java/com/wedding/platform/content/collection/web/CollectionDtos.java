@@ -9,6 +9,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 public final class CollectionDtos {
@@ -17,12 +18,16 @@ public final class CollectionDtos {
     }
 
     public record CreateCollectionRequest(
-            Long projectId,
             @NotBlank(message = "Title is required")
             @Size(max = 200, message = "Title is too long")
             String title,
             @Size(max = 5000, message = "Description is too long")
             String description,
+            LocalDate eventDate,
+            @Size(max = 64, message = "Region code is too long")
+            String regionCode,
+            @Size(max = 300, message = "Location text is too long")
+            String locationText,
             @NotNull(message = "Category id is required")
             Long categoryId,
             @NotNull(message = "Tag ids are required")
@@ -35,12 +40,16 @@ public final class CollectionDtos {
             @NotNull(message = "Version is required")
             @PositiveOrZero(message = "Version must not be negative")
             Long version,
-            Long projectId,
             @NotBlank(message = "Title is required")
             @Size(max = 200, message = "Title is too long")
             String title,
             @Size(max = 5000, message = "Description is too long")
             String description,
+            LocalDate eventDate,
+            @Size(max = 64, message = "Region code is too long")
+            String regionCode,
+            @Size(max = 300, message = "Location text is too long")
+            String locationText,
             @NotNull(message = "Category id is required")
             Long categoryId,
             @NotNull(message = "Tag ids are required")
@@ -65,9 +74,6 @@ public final class CollectionDtos {
     public record TagSummary(Long id, String name) {
     }
 
-    public record ProjectSummary(Long id, String projectCode, String title) {
-    }
-
     public record CreatorResponse(
             Long userId,
             String displayName,
@@ -86,9 +92,11 @@ public final class CollectionDtos {
 
     public record CollectionResponse(
             Long id,
-            ProjectSummary project,
             String title,
             String description,
+            LocalDate eventDate,
+            String regionCode,
+            String locationText,
             CategorySummary category,
             List<TagSummary> tags,
             Long coverPhotoId,

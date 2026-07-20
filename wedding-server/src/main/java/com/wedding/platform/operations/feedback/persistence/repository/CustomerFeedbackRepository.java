@@ -24,7 +24,7 @@ public interface CustomerFeedbackRepository extends JpaRepository<CustomerFeedba
             WHERE feedback.deleted = false
               AND (:reviewStatus IS NULL OR feedback.reviewStatus = :reviewStatus)
               AND (:publishStatus IS NULL OR feedback.publishStatus = :publishStatus)
-              AND (:projectId IS NULL OR feedback.projectId = :projectId)
+              AND (:collectionId IS NULL OR feedback.collectionId = :collectionId)
             ORDER BY
               CASE WHEN feedback.reviewStatus = :pendingStatus THEN 0
                    WHEN feedback.reviewStatus = :rejectedStatus THEN 1
@@ -35,7 +35,7 @@ public interface CustomerFeedbackRepository extends JpaRepository<CustomerFeedba
     Page<CustomerFeedback> findAllFeedback(
             @Param("reviewStatus") FeedbackReviewStatus reviewStatus,
             @Param("publishStatus") FeedbackPublishStatus publishStatus,
-            @Param("projectId") Long projectId,
+            @Param("collectionId") Long collectionId,
             @Param("pendingStatus") FeedbackReviewStatus pendingStatus,
             @Param("rejectedStatus") FeedbackReviewStatus rejectedStatus,
             Pageable pageable
@@ -48,7 +48,7 @@ public interface CustomerFeedbackRepository extends JpaRepository<CustomerFeedba
               AND (feedback.creatorUserId = :userId OR feedback.submittedBy = :userId)
               AND (:reviewStatus IS NULL OR feedback.reviewStatus = :reviewStatus)
               AND (:publishStatus IS NULL OR feedback.publishStatus = :publishStatus)
-              AND (:projectId IS NULL OR feedback.projectId = :projectId)
+              AND (:collectionId IS NULL OR feedback.collectionId = :collectionId)
             ORDER BY
               CASE WHEN feedback.reviewStatus = :pendingStatus THEN 0
                    WHEN feedback.reviewStatus = :rejectedStatus THEN 1
@@ -60,7 +60,7 @@ public interface CustomerFeedbackRepository extends JpaRepository<CustomerFeedba
             @Param("userId") Long userId,
             @Param("reviewStatus") FeedbackReviewStatus reviewStatus,
             @Param("publishStatus") FeedbackPublishStatus publishStatus,
-            @Param("projectId") Long projectId,
+            @Param("collectionId") Long collectionId,
             @Param("pendingStatus") FeedbackReviewStatus pendingStatus,
             @Param("rejectedStatus") FeedbackReviewStatus rejectedStatus,
             Pageable pageable
@@ -84,42 +84,42 @@ public interface CustomerFeedbackRepository extends JpaRepository<CustomerFeedba
 
     @Query("""
             SELECT feedback
-            FROM CustomerFeedback feedback, WeddingProject project
+            FROM CustomerFeedback feedback, WorkCollection collection
             WHERE feedback.deleted = false
-              AND feedback.projectId = project.id
+              AND feedback.collectionId = collection.id
               AND feedback.reviewStatus = :reviewStatus
               AND feedback.publishStatus = :feedbackPublishStatus
-              AND project.deleted = false
-              AND project.publishStatus = :projectPublishStatus
-              AND project.visibility = :visibility
+              AND collection.deleted = false
+              AND collection.publishStatus = :collectionPublishStatus
+              AND collection.visibility = :visibility
             ORDER BY feedback.publishedAt DESC, feedback.id DESC
             """)
     Page<CustomerFeedback> findPublicFeedback(
             @Param("reviewStatus") FeedbackReviewStatus reviewStatus,
             @Param("feedbackPublishStatus") FeedbackPublishStatus feedbackPublishStatus,
-            @Param("projectPublishStatus") PublishStatus projectPublishStatus,
+            @Param("collectionPublishStatus") PublishStatus collectionPublishStatus,
             @Param("visibility") ContentVisibility visibility,
             Pageable pageable
     );
 
     @Query("""
             SELECT feedback
-            FROM CustomerFeedback feedback, WeddingProject project
+            FROM CustomerFeedback feedback, WorkCollection collection
             WHERE feedback.deleted = false
-              AND feedback.projectId = project.id
-              AND feedback.projectId = :projectId
+              AND feedback.collectionId = collection.id
+              AND feedback.collectionId = :collectionId
               AND feedback.reviewStatus = :reviewStatus
               AND feedback.publishStatus = :feedbackPublishStatus
-              AND project.deleted = false
-              AND project.publishStatus = :projectPublishStatus
-              AND project.visibility = :visibility
+              AND collection.deleted = false
+              AND collection.publishStatus = :collectionPublishStatus
+              AND collection.visibility = :visibility
             ORDER BY feedback.publishedAt DESC, feedback.id DESC
             """)
-    List<CustomerFeedback> findPublicFeedbackByProject(
-            @Param("projectId") Long projectId,
+    List<CustomerFeedback> findPublicFeedbackByCollection(
+            @Param("collectionId") Long collectionId,
             @Param("reviewStatus") FeedbackReviewStatus reviewStatus,
             @Param("feedbackPublishStatus") FeedbackPublishStatus feedbackPublishStatus,
-            @Param("projectPublishStatus") PublishStatus projectPublishStatus,
+            @Param("collectionPublishStatus") PublishStatus collectionPublishStatus,
             @Param("visibility") ContentVisibility visibility
     );
 }

@@ -80,17 +80,16 @@ class UserNotificationFlowTests {
         notificationService.notifyUser(
                 creator.getId(),
                 admin.getId(),
-                UserNotificationType.PROJECT_PARTICIPANT_ADDED,
-                "已加入婚礼项目",
-                "您已加入一个婚礼项目。",
-                UserNotificationRelatedType.PROJECT,
+                UserNotificationType.COLLECTION_PARTICIPANT_ADDED,
+                "已加入作品集",
+                "您已加入一个作品集。",
+                UserNotificationRelatedType.COLLECTION,
                 902L
         );
-        notificationService.notifyProjectLinkApproved(
+        notificationService.notifyFeedbackApproved(
                 customer.getId(),
                 admin.getId(),
-                903L,
-                "TS20260718"
+                903L
         );
 
         String adminToken = login(ADMIN_MOBILE);
@@ -112,14 +111,14 @@ class UserNotificationFlowTests {
                         .header("Authorization", bearer(creatorToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
-                .andExpect(jsonPath("$.content[0].type").value("PROJECT_PARTICIPANT_ADDED"))
+                .andExpect(jsonPath("$.content[0].type").value("COLLECTION_PARTICIPANT_ADDED"))
                 .andExpect(jsonPath("$.unreadCount").value(1));
 
         mockMvc.perform(get("/api/customer/notifications")
                         .header("Authorization", bearer(customerToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
-                .andExpect(jsonPath("$.content[0].type").value("PROJECT_LINK_APPROVED"))
+                .andExpect(jsonPath("$.content[0].type").value("FEEDBACK_APPROVED"))
                 .andExpect(jsonPath("$.unreadCount").value(1));
 
         mockMvc.perform(get("/api/notifications")

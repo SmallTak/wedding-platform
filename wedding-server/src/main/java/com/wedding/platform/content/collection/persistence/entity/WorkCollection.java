@@ -14,6 +14,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.Instant;
+import java.time.LocalDate;
 
 @Getter
 @Setter
@@ -22,14 +23,20 @@ import java.time.Instant;
 @Table(name = "work_collection")
 public class WorkCollection extends BaseBusinessEntity {
 
-    @Column(name = "project_id")
-    private Long projectId;
-
     @Column(nullable = false, length = 200)
     private String title;
 
     @Column(length = 5000)
     private String description;
+
+    @Column(name = "event_date")
+    private LocalDate eventDate;
+
+    @Column(name = "region_code", length = 64)
+    private String regionCode;
+
+    @Column(name = "location_text", length = 300)
+    private String locationText;
 
     @Column(name = "category_id", nullable = false)
     private Long categoryId;

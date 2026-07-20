@@ -18,17 +18,15 @@ import { apiErrorMessage, formatDate } from '../utils/content'
 const loading = ref(false)
 const saving = ref(false)
 const carouselSaving = ref(false)
-const activeTab = ref('PROJECT')
-const projects = ref([])
+const activeTab = ref('FEEDBACK')
 const feedback = ref([])
 const configured = ref([])
 const carouselCandidates = ref([])
 const carouselItems = ref([])
 const carouselSearch = ref('')
-const draggingCollectionId = ref(null)
+const draggingPhotoId = ref(null)
 const guidanceOpen = ref(false)
 const limits = {
-  PROJECT: 6,
   FEEDBACK: 6,
 }
 
@@ -43,16 +41,15 @@ const filteredCarouselCandidates = computed(() => {
     ].some((value) => value?.toLocaleLowerCase().includes(keyword)),
   )
 })
-const carouselCollectionIds = computed(() =>
-  new Set(carouselItems.value.map((item) => item.collectionId)),
+const carouselPhotoIds = computed(() =>
+  new Set(carouselItems.value.map((item) => item.photoId)),
 )
 const orderedCarouselItems = computed(() =>
   [...carouselItems.value].sort((left, right) => (
-    left.sortOrder - right.sortOrder || left.collectionId - right.collectionId
+    left.sortOrder - right.sortOrder || left.photoId - right.photoId
   )),
 )
 const candidates = computed(() => {
-  if (activeTab.value === 'PROJECT') return projects.value
   return feedback.value
 })
 const selectedCount = computed(() =>
@@ -69,10 +66,9 @@ async function loadSettings() {
       homepageApi.options(),
       homepageApi.carouselOptions(),
     ])
-    projects.value = featuresResponse.data.projects
     feedback.value = featuresResponse.data.feedback
     configured.value = featuresResponse.data.features
-      .filter((item) => item.targetType !== 'COLLECTION')
+      .filter((item) => item.targetType === 'FEEDBACK')
       .map((item) => ({ ...item }))
     carouselCandidates.value = carouselResponse.data.candidates
     carouselItems.value = carouselResponse.data.items.map((item) => ({ ...item }))
@@ -83,24 +79,26 @@ async function loadSettings() {
   }
 }
 
-function carouselItemFor(collectionId) {
-  return carouselItems.value.find((item) => item.collectionId === collectionId)
+function carouselItemFor(photoId) {
+  return carouselItems.value.find((item) => item.photoId === photoId)
 }
 
 function toggleCarouselCandidate(candidate, selected) {
-  const existing = carouselItemFor(candidate.collectionId)
+  const existing = carouselItemFor(candidate.photoId)
   if (!selected && existing) {
     carouselItems.value = carouselItems.value.filter((item) => item !== existing)
     return
   }
   if (selected && !existing) {
     if (carouselItems.value.length >= 5) {
-      ElMessage.warning('首页轮播最多选择 5 个作品')
+      ElMessage.warning('首页轮播最多选择 5 张照片')
       return
     }
     carouselItems.value.push({
-      collectionId: candidate.collectionId,
+      photoId: candidate.photoId,
       collectionTitle: candidate.collectionTitle,
+      collectionId: candidate.collectionId,
+      originalUrl: candidate.originalUrl,
       description: candidate.description,
       eventDate: candidate.eventDate,
       locationText: candidate.locationText,
@@ -122,7 +120,7 @@ function removeCarouselItem(item) {
 }
 
 function carouselCandidateDisabled(candidate) {
-  return !carouselCollectionIds.value.has(candidate.collectionId) && carouselItems.value.length >= 5
+  return !carouselPhotoIds.value.has(candidate.photoId) && carouselItems.value.length >= 5
 }
 
 function carouselPreviewStyle(item) {
@@ -144,9 +142,9 @@ function carouselInvalidText(reason) {
   return {
     COLLECTION_NOT_AVAILABLE: '作品已删除或不存在',
     COLLECTION_NOT_PUBLIC: '作品已下架、隐藏或审核状态发生变化',
-    COLLECTION_COVER_REQUIRED: '作品未设置封面',
-    COLLECTION_COVER_NOT_AVAILABLE: '作品封面已删除或未通过审核',
-    ASSET_NOT_AVAILABLE: '封面图片处理失败或不可用',
+    COLLECTION_COVER_REQUIRED: '作品集未设置封面',
+    COLLECTION_COVER_NOT_AVAILABLE: '作品照片已删除或未通过审核',
+    ASSET_NOT_AVAILABLE: '图片处理失败或不可用',
   }[reason] || '作品当前不可用于首页轮播'
 }
 
@@ -154,7 +152,7 @@ function carouselDateLocation(item) {
   return [
     item.locationText,
     item.eventDate ? formatDate(item.eventDate) : null,
-  ].filter(Boolean).join(' · ') || '未关联公开项目地点和日期'
+  ].filter(Boolean).join(' · ') || '未填写作品集地点和日期'
 }
 
 function normalizeCarouselOrder(items) {
@@ -166,7 +164,7 @@ function normalizeCarouselOrder(items) {
 
 function moveCarouselItem(item, direction) {
   const items = [...orderedCarouselItems.value]
-  const index = items.findIndex((candidate) => candidate.collectionId === item.collectionId)
+  const index = items.findIndex((candidate) => candidate.photoId === item.photoId)
   const nextIndex = index + direction
   if (index < 0 || nextIndex < 0 || nextIndex >= items.length) return
   const [moved] = items.splice(index, 1)
@@ -175,27 +173,27 @@ function moveCarouselItem(item, direction) {
 }
 
 function startCarouselDrag(item, event) {
-  draggingCollectionId.value = item.collectionId
+  draggingPhotoId.value = item.photoId
   event.dataTransfer.effectAllowed = 'move'
-  event.dataTransfer.setData('text/plain', String(item.collectionId))
+  event.dataTransfer.setData('text/plain', String(item.photoId))
 }
 
 function dropCarouselItem(targetItem, event) {
   event.preventDefault()
   const sourceId = Number(event.dataTransfer.getData('text/plain'))
-  if (!sourceId || sourceId === targetItem.collectionId) return
+  if (!sourceId || sourceId === targetItem.photoId) return
   const items = [...orderedCarouselItems.value]
-  const sourceIndex = items.findIndex((item) => item.collectionId === sourceId)
-  const targetIndex = items.findIndex((item) => item.collectionId === targetItem.collectionId)
+  const sourceIndex = items.findIndex((item) => item.photoId === sourceId)
+  const targetIndex = items.findIndex((item) => item.photoId === targetItem.photoId)
   if (sourceIndex < 0 || targetIndex < 0) return
   const [moved] = items.splice(sourceIndex, 1)
   items.splice(targetIndex, 0, moved)
   carouselItems.value = normalizeCarouselOrder(items)
-  draggingCollectionId.value = null
+  draggingPhotoId.value = null
 }
 
 function finishCarouselDrag() {
-  draggingCollectionId.value = null
+  draggingPhotoId.value = null
 }
 
 function featureFor(targetId) {
@@ -237,7 +235,6 @@ function candidateTitle(candidate) {
 }
 
 function candidateMeta(candidate) {
-  if (activeTab.value === 'PROJECT') return candidate.locationText || '未填写地点'
   return candidate.content
 }
 
@@ -245,12 +242,12 @@ async function saveCarousel() {
   carouselSaving.value = true
   try {
     const items = normalizeCarouselOrder(orderedCarouselItems.value).map(({
-      collectionId,
+      photoId,
       sortOrder,
       focalX,
       focalY,
     }) => ({
-      collectionId,
+      photoId,
       sortOrder,
       focalX,
       focalY,
@@ -277,7 +274,7 @@ async function saveFeatures() {
     }))
     const { data } = await homepageApi.replace(items)
     configured.value = data.features
-      .filter((item) => item.targetType !== 'COLLECTION')
+      .filter((item) => item.targetType === 'FEEDBACK')
       .map((item) => ({ ...item }))
     ElMessage.success('首页推荐配置已发布')
   } catch (error) {
@@ -292,7 +289,6 @@ async function saveFeatures() {
   <main class="dashboard-content management-content" v-loading="loading">
     <section class="management-summary operations-summary homepage-summary" aria-label="首页推荐概览">
       <div><span>轮播作品</span><strong>{{ carouselItems.length }}</strong></div>
-      <div><span>已选项目</span><strong>{{ configured.filter((item) => item.targetType === 'PROJECT').length }}</strong></div>
       <div><span>已选评价</span><strong>{{ configured.filter((item) => item.targetType === 'FEEDBACK').length }}</strong></div>
     </section>
 
@@ -329,20 +325,20 @@ async function saveFeatures() {
 
       <div v-if="guidanceOpen" class="homepage-guidance">
         <strong>填写说明</strong>
-        <span>只能选择已审核、已发布、公开且设置了有效封面的作品集。</span>
-        <span>地点和日期来自关联婚礼项目，摘要来自作品集介绍；需要修改时请回到作品集编辑页。</span>
+        <span>只能选择已审核、已发布、公开且图片通过审核的作品照片。</span>
+        <span>地点、日期和摘要来自作品集；需要修改时请回到作品集编辑页。</span>
         <span>焦点会同时作用于桌面和手机预览，发布后立即影响官网作品轮播。</span>
       </div>
 
       <div v-if="orderedCarouselItems.length" class="carousel-selection-list">
         <article
           v-for="item in orderedCarouselItems"
-          :key="item.collectionId"
+          :key="item.photoId"
           :class="[
             'carousel-selection-item',
             {
               invalid: !item.valid,
-              dragging: draggingCollectionId === item.collectionId,
+              dragging: draggingPhotoId === item.photoId,
             },
           ]"
           @dragover.prevent
@@ -382,7 +378,7 @@ async function saveFeatures() {
             </button>
           </div>
           <div class="carousel-selection-copy">
-            <strong>{{ item.collectionTitle || `作品集 #${item.collectionId}` }}</strong>
+            <strong>{{ item.collectionTitle || `作品集 #${item.photoId}` }}</strong>
             <span>{{ carouselDateLocation(item) }}</span>
             <span v-if="item.description" class="carousel-description">{{ item.description }}</span>
             <span v-if="!item.valid" class="negative-text">{{ carouselInvalidText(item.invalidReason) }}，请移除后发布</span>
@@ -432,11 +428,11 @@ async function saveFeatures() {
       <div class="carousel-candidate-grid">
         <article
           v-for="candidate in filteredCarouselCandidates"
-          :key="candidate.collectionId"
+          :key="candidate.photoId"
           :class="[
             'carousel-candidate',
             {
-              selected: carouselCollectionIds.has(candidate.collectionId),
+              selected: carouselPhotoIds.has(candidate.photoId),
               disabled: carouselCandidateDisabled(candidate),
             },
           ]"
@@ -448,14 +444,14 @@ async function saveFeatures() {
               loading="lazy"
             />
             <el-checkbox
-              :model-value="carouselCollectionIds.has(candidate.collectionId)"
+              :model-value="carouselPhotoIds.has(candidate.photoId)"
               :disabled="carouselCandidateDisabled(candidate)"
               :aria-label="`选择${candidate.collectionTitle}作品`"
               @change="toggleCarouselCandidate(candidate, $event)"
             />
           </div>
           <strong>{{ candidate.collectionTitle }}</strong>
-          <span>{{ candidate.locationText || '未关联公开项目地点' }}</span>
+          <span>{{ candidate.locationText || '未填写作品集地点' }}</span>
           <small v-if="candidate.eventDate">{{ formatDate(candidate.eventDate) }}</small>
         </article>
         <div v-if="!loading && filteredCarouselCandidates.length === 0" class="empty-table carousel-empty">
@@ -467,9 +463,6 @@ async function saveFeatures() {
     <section class="dashboard-section management-panel">
       <div class="management-toolbar homepage-toolbar">
         <div class="segmented-control" aria-label="首页内容类型">
-          <button type="button" :class="{ active: activeTab === 'PROJECT' }" @click="activeTab = 'PROJECT'">
-            婚礼项目
-          </button>
           <button type="button" :class="{ active: activeTab === 'FEEDBACK' }" @click="activeTab = 'FEEDBACK'">
             客户评价
           </button>

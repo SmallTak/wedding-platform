@@ -14,7 +14,6 @@ const overview = ref({
   summary: {
     pageViews: 0,
     uniqueVisitors: 0,
-    projectViews: 0,
     collectionViews: 0,
     inquiryCount: 0,
     creatorUploadCount: 0,
@@ -24,7 +23,6 @@ const overview = ref({
     offlineContent: 0,
   },
   trend: [],
-  topProjects: [],
   topCollections: [],
 })
 
@@ -42,12 +40,6 @@ const metrics = computed(() => [
     tone: 'green',
   },
   {
-    label: '项目浏览量',
-    value: overview.value.summary.projectViews,
-    note: '婚礼项目详情访问',
-    tone: 'amber',
-  },
-  {
     label: '作品浏览量',
     value: overview.value.summary.collectionViews,
     note: '作品集详情访问',
@@ -58,17 +50,17 @@ const metrics = computed(() => [
 const businessMetrics = computed(() => [
   { label: '咨询线索', value: overview.value.summary.inquiryCount, note: `近 ${days.value} 天` },
   { label: '创作者上传', value: overview.value.summary.creatorUploadCount, note: `近 ${days.value} 天图片` },
-  { label: '待审核内容', value: overview.value.summary.pendingContent, note: '当前项目与作品集' },
+  { label: '待审核内容', value: overview.value.summary.pendingContent, note: '当前作品集' },
   { label: '被驳回内容', value: overview.value.summary.rejectedContent, note: '当前部分驳回' },
-  { label: '已发布内容', value: overview.value.summary.publishedContent, note: '当前项目与作品集' },
-  { label: '已下架内容', value: overview.value.summary.offlineContent, note: '当前项目与作品集' },
+  { label: '已发布内容', value: overview.value.summary.publishedContent, note: '当前作品集' },
+  { label: '已下架内容', value: overview.value.summary.offlineContent, note: '当前作品集' },
 ])
 
 const chartMaximum = computed(() => Math.max(
   1,
   ...overview.value.trend.flatMap((item) => [
     item.pageViews,
-    item.projectViews + item.collectionViews,
+    item.collectionViews,
   ]),
 ))
 
@@ -99,7 +91,7 @@ function barHeight(value) {
 }
 
 function contentViews(item) {
-  return item.projectViews + item.collectionViews
+  return item.collectionViews
 }
 
 function formatNumber(value) {
@@ -147,7 +139,7 @@ function formatDay(value) {
 
       <div class="analytics-legend" aria-label="趋势图图例">
         <span><i class="page"></i>官网访问</span>
-        <span><i class="content"></i>项目与作品浏览</span>
+        <span><i class="content"></i>作品浏览</span>
       </div>
       <div class="analytics-chart-scroll">
         <div
@@ -164,7 +156,7 @@ function formatDay(value) {
               <i
                 class="content"
                 :style="{ height: barHeight(contentViews(item)) }"
-                :title="`${item.date} 项目 ${item.projectViews}，作品 ${item.collectionViews}`"
+                :title="`${item.date} 作品 ${item.collectionViews}`"
               ></i>
             </div>
             <span>{{ formatDay(item.date) }}</span>
@@ -190,20 +182,6 @@ function formatDay(value) {
     </section>
 
     <section class="dashboard-split analytics-popular-grid">
-      <div class="dashboard-section compact-section">
-        <div class="section-title-row">
-          <div><p>Popular projects</p><h2>热门婚礼项目</h2></div>
-        </div>
-        <div v-if="overview.topProjects.length" class="analytics-ranking">
-          <article v-for="(item, index) in overview.topProjects" :key="item.targetId">
-            <span>{{ index + 1 }}</span>
-            <div><strong>{{ item.title }}</strong><small>{{ item.uniqueVisitors }} 位访客</small></div>
-            <b>{{ formatNumber(item.views) }}</b>
-          </article>
-        </div>
-        <div v-else class="dashboard-empty">当前周期暂无项目浏览数据</div>
-      </div>
-
       <div class="dashboard-section compact-section">
         <div class="section-title-row">
           <div><p>Popular collections</p><h2>热门作品集</h2></div>

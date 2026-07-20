@@ -5,6 +5,31 @@
 
 ## 2026-07-20
 
+### 移除婚礼项目与作品集首页化
+
+- 新增 Flyway `V15__remove_wedding_projects.sql`，迁移作品集日期地点字段、首页轮播照片引用和评价作品集引用，并删除婚礼项目、项目参与者、客户项目申请、项目审核/统计/推荐和 `/content/projects` 权限资源。
+- 后端删除婚礼项目、公开项目、项目审核和客户项目关联代码；作品集、审核、评价、通知、统计和首页运营改为作品集/照片维度；客户中心评价保留只读列表 `GET /api/customer/feedback`，自助提交/修改/撤回下线。
+- 官网删除婚礼项目入口、列表、详情和客户项目关联页；首页改为作品集精选照片轮播，点击跳转作品集；作品集详情灯箱支持左右按钮、键盘切换和移动端滑动；客户中心“我的评价”改为只读展示，移除写评价、修改和撤回入口。
+- 工作台删除婚礼项目导航、路由和管理页；审核中心仅保留作品集；作品集不再关联项目；评价改为按作品集提交/筛选；首页轮播改为选择作品照片。
+- 同步更新阶段二项目废弃说明、阶段二作品集、阶段三官网审核、阶段四评价运营、阶段四客户中心、数据统计接口文档和开发交接。
+- 验证：执行 `cd wedding-server && ./gradlew test`，后端完整测试共 22 个通过。
+- 验证：执行 `cd wedding-web && npm run build`，官网生产构建通过。
+- 验证：执行 `cd wedding-console && npm install` 补齐本机依赖后，`npm run build` 工作台生产构建通过。
+- 修复：根据复查结果补齐客户中心评价只读接口与页面，避免客户登录后访问已下线的 `/api/customer/feedback/options`、提交、修改和撤回接口导致 `404`。
+- 验证：修复后再次执行 `cd wedding-server && ./gradlew test`、`cd wedding-web && npm run build`、`cd wedding-console && npm run build`，均通过。
+- 部署：发布前在 iot 执行生产 MySQL 逻辑备份，备份目录为 `/home/apps/wedding-platform/backups/pre-v15-20260720-141028`。
+- 部署：将当前源码同步到 iot 的 `/home/apps/wedding-platform/source`，执行 `sudo ./deploy/scripts/deploy-local.sh` 完成后端测试、官网/工作台/JAR 构建、高清品牌图回填、应用与配置备份、服务重启和正式域名验收；首次阶段六发布应用与配置备份目录为 `/home/apps/wedding-platform/backups/20260720-141331`。
+- 部署：Flyway `V15` 已在生产 MySQL 成功执行，`wedding_project`、`project_creator`、`project_customer_application` 和 `work_collection.project_id` 已移除，`work_collection.event_date`、`homepage_carousel_item.photo_id`、`customer_feedback.collection_id` 已存在，`/content/projects` 权限资源已删除。
+- 验证：生产 `wedding-platform.service` 为 `active`，Nginx 配置检查通过；正式首页、工作台、`/api/public/status`、`/api/public/collections`、`/api/public/home`、`/api/public/feedback` 和公开分类接口返回 `200`，`/api/public/projects` 返回 `404`，`/media/originals/not-exist.txt` 返回 `404`。
+- 验证：线上 JAR SHA-256 为 `cd84052501f48123fb26a502422e8e2e07384327484e3fcfad4dbc297161ab71`，与 iot 构建产物一致；官网和工作台线上目录与 iot 构建 `dist` 无差异。
+- 补发：修复客户中心评价残留接口后再次同步源码到 iot 并执行 `sudo ./deploy/scripts/deploy-local.sh`；脚本内后端测试、官网/工作台/JAR 构建、高清品牌图回填和正式域名验收均通过，应用与配置备份目录为 `/home/apps/wedding-platform/backups/20260720-145925`。
+- 补发验证：生产 `wedding-platform.service` 为 `active`，Nginx 配置检查通过；正式首页、工作台、`/api/public/status`、`/api/public/collections`、`/api/public/home`、`/api/public/feedback` 返回 `200`，未认证 `GET /api/customer/feedback` 和已下线 `/api/customer/feedback/options` 均返回 `401`，`/api/public/projects` 和 `/media/originals/not-exist.txt` 返回 `404`；线上目录与 iot 构建 `dist` 无差异。
+- 补发验证：线上 JAR SHA-256 为 `c9f11a3d3e4d21100500dd7c5be29c15dabaa6e1bf1d4aa3afe71fc519d2a073`，与 iot 构建产物一致；线上官网与源码中已无客户评价自助提交/修改/撤回接口调用字符串。
+- 修复：根据移动端反馈，将官网首页最新作品轮播移动端样式从固定 `520px` 最小高度、`4 / 5` 比例改为 `clamp(320px, 62vw, 460px)` 与 `16 / 10` 比例，避免手机端图片区域过高。
+- 验证：执行 `cd wedding-web && npm run build`，官网生产构建通过。
+- 部署：移动端轮播尺寸修复尚未发布生产，没有后端、数据库、工作台、生产配置或线上状态变化。
+
+
 ### 高清品牌图与原始文件私有化
 
 - 新增高清品牌图派生路径解析，公开响应继续保留 `coverOriginalUrl` 和 `originalUrl` 字段名，
@@ -13,7 +38,7 @@
   缩略图和既有预览图保持不变。
 - 新增 `backfillBrandedImages` Gradle 任务，发布脚本会在替换应用前为历史原图补生成缺失的
   高清品牌图，默认跳过已存在文件。
-- Nginx 待发布配置改为公开 `/media/branded/`、`/media/previews/` 和 `/media/thumbnails/`，
+- Nginx 生产配置已公开 `/media/branded/`、`/media/previews/` 和 `/media/thumbnails/`，
   `/media/originals/` 固定返回 `404`；发布脚本同时验证高清品牌图可访问和原图不可访问。
 - 官网列表、首页推荐、项目详情、作品集封面和首页轮播优先使用缩略图或预览图；作品集灯箱先
   显示预览图，高清品牌图加载成功后替换。
@@ -30,8 +55,7 @@
   `cd wedding-server && JAVA_HOME=/opt/java/jdk17 PATH=/opt/java/jdk17/bin:$PATH ./gradlew backfillBrandedImages -PstorageRoot=/tmp/wedding-branded-backfill-check-empty`，
   任务入口执行通过，输出 `generated=0 skipped=0`。
 - 验证：`bash -n deploy/scripts/deploy-local.sh` 和 `git diff --check` 通过。
-- 部署：本次未执行生产部署，没有数据库迁移；生产仍运行 2026-07-19 原图公开版本，
-  生产 schema 保持 `V14`。
+- 部署：已随同日阶段六发布到 iot；本批次本身没有数据库迁移，生产 schema 随阶段六升级为 `V15`。
 
 ## 2026-07-19
 

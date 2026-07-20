@@ -5,8 +5,7 @@ import {
   BarChart3,
   Bell,
   CircleUserRound,
-  FolderHeart,
-  Images,
+    Images,
   Inbox,
   LayoutDashboard,
   LayoutTemplate,
@@ -33,7 +32,6 @@ const mobileMenuOpen = ref(false)
 const navItems = [
   { label: '工作台', to: '/', icon: LayoutDashboard, permission: '/dashboard', route: 'dashboard' },
   { label: '站内消息', to: '/notifications', icon: Bell, permission: '/notifications', route: 'notifications' },
-  { label: '婚礼项目', to: '/projects', icon: FolderHeart, permission: '/content/projects', route: 'projects' },
   {
     label: '作品集',
     to: '/collections',

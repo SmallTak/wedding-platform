@@ -2,8 +2,6 @@ package com.wedding.platform.operations.notification.application;
 
 import com.wedding.platform.content.collection.persistence.entity.CollectionCreator;
 import com.wedding.platform.content.collection.persistence.repository.CollectionCreatorRepository;
-import com.wedding.platform.content.project.persistence.entity.ProjectCreator;
-import com.wedding.platform.content.project.persistence.repository.ProjectCreatorRepository;
 import com.wedding.platform.operations.notification.persistence.entity.UserNotification;
 import com.wedding.platform.operations.notification.persistence.entity.UserNotificationRelatedType;
 import com.wedding.platform.operations.notification.persistence.entity.UserNotificationType;
@@ -30,18 +28,15 @@ public class UserNotificationService {
 
     private final UserNotificationRepository notificationRepository;
     private final SystemUserRepository userRepository;
-    private final ProjectCreatorRepository projectCreatorRepository;
     private final CollectionCreatorRepository collectionCreatorRepository;
 
     public UserNotificationService(
             UserNotificationRepository notificationRepository,
             SystemUserRepository userRepository,
-            ProjectCreatorRepository projectCreatorRepository,
             CollectionCreatorRepository collectionCreatorRepository
     ) {
         this.notificationRepository = notificationRepository;
         this.userRepository = userRepository;
-        this.projectCreatorRepository = projectCreatorRepository;
         this.collectionCreatorRepository = collectionCreatorRepository;
     }
 
@@ -136,23 +131,6 @@ public class UserNotificationService {
         notifyUsers(recipients, actorId, type, title, content, relatedType, relatedId);
     }
 
-    public void notifyProjectCreators(
-            Long projectId,
-            Long actorId,
-            UserNotificationType type,
-            String title,
-            String content,
-            UserNotificationRelatedType relatedType
-    ) {
-        Set<Long> recipients = projectCreatorRepository.findAllByProjectId(projectId).stream()
-                .map(ProjectCreator::getId)
-                .map(id -> id.getCreatorUserId())
-                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-        recipients.retainAll(activeUsers("CREATOR"));
-        recipients.remove(actorId);
-        notifyUsers(recipients, actorId, type, title, content, relatedType, projectId);
-    }
-
     public void notifyCollectionCreators(
             Long collectionId,
             Long actorId,
@@ -168,41 +146,6 @@ public class UserNotificationService {
         recipients.retainAll(activeUsers("CREATOR"));
         recipients.remove(actorId);
         notifyUsers(recipients, actorId, type, title, content, relatedType, collectionId);
-    }
-
-    public void notifyProjectLinkApproved(
-            Long customerId,
-            Long actorId,
-            Long applicationId,
-            String projectCode
-    ) {
-        create(
-                customerId,
-                actorId,
-                UserNotificationType.PROJECT_LINK_APPROVED,
-                "项目关联申请已通过",
-                "项目编号 " + displayProjectCode(projectCode) + " 的关联申请已通过，您现在可以提交评价。",
-                UserNotificationRelatedType.PROJECT_APPLICATION,
-                applicationId
-        );
-    }
-
-    public void notifyProjectLinkRejected(
-            Long customerId,
-            Long actorId,
-            Long applicationId,
-            String projectCode,
-            String reason
-    ) {
-        create(
-                customerId,
-                actorId,
-                UserNotificationType.PROJECT_LINK_REJECTED,
-                "项目关联申请未通过",
-                "项目编号 " + displayProjectCode(projectCode) + " 的关联申请未通过。原因：" + reason.trim(),
-                UserNotificationRelatedType.PROJECT_APPLICATION,
-                applicationId
-        );
     }
 
     public void notifyFeedbackApproved(Long customerId, Long actorId, Long feedbackId) {
@@ -370,9 +313,5 @@ public class UserNotificationService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PAGE_INVALID",
                     "Page must be at least 0 and size must be between 1 and " + MAX_PAGE_SIZE);
         }
-    }
-
-    private String displayProjectCode(String projectCode) {
-        return projectCode == null || projectCode.isBlank() ? "当前项目" : projectCode;
     }
 }

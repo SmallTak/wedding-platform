@@ -15,7 +15,7 @@ import {
   Undo2,
   UsersRound,
 } from '@lucide/vue'
-import { collectionApi, projectApi, reviewApi } from '../api/content'
+import { collectionApi, reviewApi } from '../api/content'
 import PublicationDialog from '../components/PublicationDialog.vue'
 import http from '../api/http'
 import { useAuthStore } from '../stores/auth'
@@ -37,7 +37,6 @@ const creatorsLoading = ref(false)
 const deletingId = ref(null)
 const publishingId = ref(null)
 const collections = ref([])
-const projectOptions = ref([])
 const categoryOptions = ref([])
 const tagOptions = ref([])
 const allCreators = ref([])
@@ -56,13 +55,11 @@ const creatorUserIds = ref([])
 
 const filters = reactive({
   keyword: '',
-  projectId: null,
   categoryId: null,
 })
 
 const form = reactive({
   version: null,
-  projectId: null,
   title: '',
   description: '',
   categoryId: null,
@@ -72,9 +69,6 @@ const form = reactive({
 const isAdmin = computed(() => auth.user?.accountType === 'ADMIN')
 const currentPagePublished = computed(
   () => collections.value.filter((collection) => collection.publishStatus === 'PUBLISHED').length,
-)
-const currentPageIndependent = computed(
-  () => collections.value.filter((collection) => !collection.project).length,
 )
 const formCategoryOptions = computed(() => {
   const options = categoryOptions.value.map((item) => ({ ...item, retained: false }))
@@ -91,13 +85,6 @@ const formTagOptions = computed(() => {
   }
   return options
 })
-const formProjectOptions = computed(() => {
-  const options = projectOptions.value.map((item) => ({ ...item }))
-  const current = editingCollection.value?.project
-  if (current && !options.some((item) => item.id === current.id)) options.push(current)
-  return options
-})
-
 onMounted(async () => {
   await Promise.all([loadSupportData(), loadCollections()])
 })
@@ -105,31 +92,14 @@ onMounted(async () => {
 async function loadSupportData() {
   supportLoading.value = true
   try {
-    const [optionResponse, projects] = await Promise.all([
-      collectionApi.options(),
-      loadAllProjects(),
-    ])
+    const optionResponse = await collectionApi.options()
     categoryOptions.value = optionResponse.data.categories
     tagOptions.value = optionResponse.data.tags
-    projectOptions.value = projects
   } catch (error) {
     ElMessage.error(apiErrorMessage(error, '作品集表单选项加载失败'))
   } finally {
     supportLoading.value = false
   }
-}
-
-async function loadAllProjects() {
-  const result = []
-  let currentPage = 0
-  let totalPages = 1
-  while (currentPage < totalPages) {
-    const { data } = await projectApi.list({ page: currentPage, size: 100 })
-    result.push(...data.content)
-    totalPages = data.totalPages
-    currentPage += 1
-  }
-  return result
 }
 
 async function loadCollections() {
@@ -139,7 +109,6 @@ async function loadCollections() {
       page: page.value,
       size: size.value,
       keyword: filters.keyword.trim() || undefined,
-      projectId: filters.projectId || undefined,
       categoryId: filters.categoryId || undefined,
     })
     collections.value = data.content
@@ -157,7 +126,7 @@ function runSearch() {
 }
 
 function resetFilters() {
-  Object.assign(filters, { keyword: '', projectId: null, categoryId: null })
+  Object.assign(filters, { keyword: '', categoryId: null })
   page.value = 0
   loadCollections()
 }
@@ -170,7 +139,6 @@ function changePage(value) {
 function resetForm() {
   Object.assign(form, {
     version: null,
-    projectId: null,
     title: '',
     description: '',
     categoryId: null,
@@ -194,7 +162,6 @@ function openEditDialog(collection) {
   editingCollection.value = collection
   Object.assign(form, {
     version: collection.version,
-    projectId: collection.project?.id || null,
     title: collection.title,
     description: collection.description || '',
     categoryId: collection.category.id,
@@ -219,7 +186,6 @@ async function saveCollection() {
   if (!validateForm()) return
   saving.value = true
   const payload = {
-    projectId: form.projectId || null,
     title: form.title.trim(),
     description: form.description.trim() || null,
     categoryId: form.categoryId,
@@ -260,14 +226,7 @@ async function openCreatorDialog(collection) {
   creatorsLoading.value = true
   try {
     await loadCreators()
-    const activeCreators = allCreators.value.filter((creator) => creator.accountStatus === 'ACTIVE')
-    if (collection.project) {
-      const { data: project } = await projectApi.get(collection.project.id)
-      const participantIds = new Set(project.creators.map((creator) => creator.userId))
-      creatorChoices.value = activeCreators.filter((creator) => participantIds.has(creator.id))
-    } else {
-      creatorChoices.value = activeCreators
-    }
+    creatorChoices.value = allCreators.value.filter((creator) => creator.accountStatus === 'ACTIVE')
   } catch (error) {
     creatorDialogVisible.value = false
     ElMessage.error(apiErrorMessage(error, '共同创作者选项加载失败'))
@@ -410,7 +369,7 @@ function canPublish(collection) {
   <main class="dashboard-content management-content" v-loading="loading || supportLoading">
     <section class="management-summary" aria-label="作品集概览">
       <div><span>可访问作品集</span><strong>{{ totalElements }}</strong></div>
-      <div><span>本页独立作品集</span><strong>{{ currentPageIndependent }}</strong></div>
+      <div><span>本页作品集</span><strong>{{ currentPageIndependent }}</strong></div>
       <div><span>本页已发布</span><strong>{{ currentPagePublished }}</strong></div>
     </section>
 
@@ -420,14 +379,6 @@ function canPublish(collection) {
           <Search :size="17" />
           <input v-model="filters.keyword" type="search" placeholder="搜索作品集标题或介绍" />
         </div>
-        <el-select v-model="filters.projectId" clearable filterable placeholder="全部项目">
-          <el-option
-            v-for="project in projectOptions"
-            :key="project.id"
-            :label="`${project.projectCode} · ${project.title}`"
-            :value="project.id"
-          />
-        </el-select>
         <el-select v-model="filters.categoryId" clearable placeholder="全部分类">
           <el-option
             v-for="category in categoryOptions"
@@ -448,7 +399,7 @@ function canPublish(collection) {
 
       <div class="management-table collection-management-table" role="table" aria-label="作品集">
         <div class="management-row management-table-head" role="row">
-          <span>作品集</span><span>关联项目</span><span>分类标签</span><span>共同创作者</span><span>审核</span><span>发布</span><span>操作</span>
+          <span>作品集</span><span>分类标签</span><span>共同创作者</span><span>审核</span><span>发布</span><span>操作</span>
         </div>
         <article v-for="collection in collections" :key="collection.id" class="management-row" role="row">
           <div class="primary-cell collection-title-cell" data-label="作品集">
@@ -457,11 +408,6 @@ function canPublish(collection) {
               <strong>{{ collection.title }}</strong>
               <small>{{ collection.coverPhotoId ? `封面图片 #${collection.coverPhotoId}` : '尚未设置封面' }}</small>
             </div>
-          </div>
-          <div class="association-cell" data-label="关联项目">
-            <FolderHeart :size="15" />
-            <span v-if="collection.project">{{ collection.project.title }}<small>{{ collection.project.projectCode }}</small></span>
-            <span v-else>独立作品集<small>未关联婚礼项目</small></span>
           </div>
           <div class="taxonomy-cell" data-label="分类标签" :title="tagNames(collection)">
             <strong>{{ collection.category.name }}</strong>
@@ -555,17 +501,6 @@ function canPublish(collection) {
     >
       <form id="collection-form" class="dialog-form management-form" @submit.prevent="saveCollection">
         <label class="wide-field">作品集标题<el-input v-model="form.title" maxlength="200" show-word-limit /></label>
-        <label class="wide-field">
-          关联婚礼项目
-          <el-select v-model="form.projectId" clearable filterable placeholder="不选择则创建独立作品集">
-            <el-option
-              v-for="project in formProjectOptions"
-              :key="project.id"
-              :label="`${project.projectCode} · ${project.title}`"
-              :value="project.id"
-            />
-          </el-select>
-        </label>
         <label>
           主分类
           <el-select v-model="form.categoryId" placeholder="选择分类">
@@ -608,9 +543,6 @@ function canPublish(collection) {
     >
       <div v-loading="creatorsLoading" class="assignment-dialog">
         <p>{{ creatorCollection?.title }}</p>
-        <small v-if="creatorCollection?.project" class="assignment-note">
-          仅显示“{{ creatorCollection.project.title }}”的启用参与者
-        </small>
         <el-checkbox-group v-model="creatorUserIds" class="creator-option-list">
           <el-checkbox v-for="creator in creatorChoices" :key="creator.id" :value="creator.id">
             <span>{{ creator.displayName || creator.mobile }}</span>

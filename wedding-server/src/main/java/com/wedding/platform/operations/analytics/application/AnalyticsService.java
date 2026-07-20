@@ -4,8 +4,6 @@ import com.wedding.platform.content.collection.persistence.entity.WorkCollection
 import com.wedding.platform.content.collection.persistence.repository.WorkCollectionRepository;
 import com.wedding.platform.content.media.persistence.entity.CollectionPhoto;
 import com.wedding.platform.content.media.persistence.repository.CollectionPhotoRepository;
-import com.wedding.platform.content.project.persistence.entity.WeddingProject;
-import com.wedding.platform.content.project.persistence.repository.WeddingProjectRepository;
 import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
 import com.wedding.platform.content.shared.ReviewStatus;
@@ -44,7 +42,6 @@ public class AnalyticsService {
     private static final int MAX_DAYS = 90;
 
     private final SiteVisitEventRepository visitRepository;
-    private final WeddingProjectRepository projectRepository;
     private final WorkCollectionRepository collectionRepository;
     private final ConsultationLeadRepository inquiryRepository;
     private final CollectionPhotoRepository photoRepository;
@@ -52,14 +49,12 @@ public class AnalyticsService {
 
     public AnalyticsService(
             SiteVisitEventRepository visitRepository,
-            WeddingProjectRepository projectRepository,
             WorkCollectionRepository collectionRepository,
             ConsultationLeadRepository inquiryRepository,
             CollectionPhotoRepository photoRepository,
             SystemUserRepository userRepository
     ) {
         this.visitRepository = visitRepository;
-        this.projectRepository = projectRepository;
         this.collectionRepository = collectionRepository;
         this.inquiryRepository = inquiryRepository;
         this.photoRepository = photoRepository;
@@ -117,8 +112,6 @@ public class AnalyticsService {
         applyDailyCounts(trend, visitRepository.dailyUniqueVisitors(
                 SiteVisitType.SITE, startDate, endDate), DailyMetric.UNIQUE_VISITORS);
         applyDailyCounts(trend, visitRepository.dailyCounts(
-                SiteVisitType.PROJECT, startDate, endDate), DailyMetric.PROJECT_VIEWS);
-        applyDailyCounts(trend, visitRepository.dailyCounts(
                 SiteVisitType.COLLECTION, startDate, endDate), DailyMetric.COLLECTION_VIEWS);
 
         List<ConsultationLead> inquiries =
@@ -140,19 +133,13 @@ public class AnalyticsService {
                 visitRepository.countUniqueVisitors(
                         SiteVisitType.SITE, startDate, endDate),
                 visitRepository.countByEventTypeAndEventDateBetween(
-                        SiteVisitType.PROJECT, startDate, endDate),
-                visitRepository.countByEventTypeAndEventDateBetween(
                         SiteVisitType.COLLECTION, startDate, endDate),
                 inquiries.size(),
                 creatorUploads.size(),
-                collectionRepository.countByDeletedFalseAndReviewStatus(ReviewStatus.PENDING)
-                        + projectRepository.countByDeletedFalseAndReviewStatus(ReviewStatus.PENDING),
-                collectionRepository.countByDeletedFalseAndReviewStatus(ReviewStatus.PARTIALLY_REJECTED)
-                        + projectRepository.countByDeletedFalseAndReviewStatus(ReviewStatus.PARTIALLY_REJECTED),
-                collectionRepository.countByDeletedFalseAndPublishStatus(PublishStatus.PUBLISHED)
-                        + projectRepository.countByDeletedFalseAndPublishStatus(PublishStatus.PUBLISHED),
+                collectionRepository.countByDeletedFalseAndReviewStatus(ReviewStatus.PENDING),
+                collectionRepository.countByDeletedFalseAndReviewStatus(ReviewStatus.PARTIALLY_REJECTED),
+                collectionRepository.countByDeletedFalseAndPublishStatus(PublishStatus.PUBLISHED),
                 collectionRepository.countByDeletedFalseAndPublishStatus(PublishStatus.OFFLINE)
-                        + projectRepository.countByDeletedFalseAndPublishStatus(PublishStatus.OFFLINE)
         );
 
         return new AnalyticsDtos.AnalyticsOverview(
@@ -161,7 +148,6 @@ public class AnalyticsService {
                 endDate,
                 summary,
                 trend.values().stream().map(DailyAccumulator::toResponse).toList(),
-                topProjects(startDate, endDate),
                 topCollections(startDate, endDate)
         );
     }
@@ -185,24 +171,6 @@ public class AnalyticsService {
                 accumulator.set(metric, item.getEventCount() == null ? 0 : item.getEventCount());
             }
         });
-    }
-
-    private List<AnalyticsDtos.PopularContent> topProjects(LocalDate startDate, LocalDate endDate) {
-        return visitRepository.topTargets(
-                        SiteVisitType.PROJECT,
-                        startDate,
-                        endDate,
-                        PageRequest.of(0, 5)
-                ).stream()
-                .map(item -> new AnalyticsDtos.PopularContent(
-                        item.getTargetId(),
-                        projectRepository.findById(item.getTargetId())
-                                .map(WeddingProject::getTitle)
-                                .orElse("项目 #" + item.getTargetId()),
-                        item.getViews(),
-                        item.getUniqueVisitors()
-                ))
-                .toList();
     }
 
     private List<AnalyticsDtos.PopularContent> topCollections(LocalDate startDate, LocalDate endDate) {
@@ -242,12 +210,6 @@ public class AnalyticsService {
         if (SiteVisitType.SITE == type) {
             return true;
         }
-        if (SiteVisitType.PROJECT == type) {
-            return projectRepository.findByIdAndDeletedFalseAndPublishStatus(
-                            targetId, PublishStatus.PUBLISHED)
-                    .filter(project -> ContentVisibility.HIDDEN != project.getVisibility())
-                    .isPresent();
-        }
         return collectionRepository.findByIdAndDeletedFalseAndPublishStatus(
                         targetId, PublishStatus.PUBLISHED)
                 .filter(collection -> ContentVisibility.HIDDEN != collection.getVisibility())
@@ -279,7 +241,6 @@ public class AnalyticsService {
     private enum DailyMetric {
         PAGE_VIEWS,
         UNIQUE_VISITORS,
-        PROJECT_VIEWS,
         COLLECTION_VIEWS
     }
 
@@ -288,7 +249,6 @@ public class AnalyticsService {
         private final LocalDate date;
         private long pageViews;
         private long uniqueVisitors;
-        private long projectViews;
         private long collectionViews;
         private long inquiryCount;
         private long creatorUploadCount;
@@ -301,7 +261,6 @@ public class AnalyticsService {
             switch (metric) {
                 case PAGE_VIEWS -> pageViews = value;
                 case UNIQUE_VISITORS -> uniqueVisitors = value;
-                case PROJECT_VIEWS -> projectViews = value;
                 case COLLECTION_VIEWS -> collectionViews = value;
             }
         }
@@ -311,7 +270,6 @@ public class AnalyticsService {
                     date,
                     pageViews,
                     uniqueVisitors,
-                    projectViews,
                     collectionViews,
                     inquiryCount,
                     creatorUploadCount

@@ -64,7 +64,7 @@ function changePage(nextPage) {
             <p>“{{ item.content }}”</p>
             <footer>
               <strong>{{ item.customerDisplayName }}</strong>
-              <span>{{ item.projectTitle }} · {{ item.creatorDisplayName }}</span>
+              <span>{{ item.collectionTitle }} · {{ item.creatorDisplayName }}</span>
             </footer>
             <div v-if="item.reply" class="public-feedback-reply">
               <span>创作者回复</span>

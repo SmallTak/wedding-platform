@@ -847,7 +847,7 @@ a {
   background: rgba(13, 12, 10, 0.94);
 }
 
-.image-lightbox > button {
+.image-lightbox > .lightbox-close {
   position: absolute;
   top: 18px;
   right: 18px;
@@ -861,6 +861,24 @@ a {
   color: #fff;
   cursor: pointer;
 }
+
+.image-lightbox > .lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  cursor: pointer;
+}
+
+.image-lightbox > .lightbox-nav.prev { left: 24px; right: auto; }
+.image-lightbox > .lightbox-nav.next { right: 24px; }
 
 .image-lightbox img {
   max-width: 100%;
@@ -1143,8 +1161,8 @@ a {
   }
 
   .work-carousel {
-    min-height: 520px;
-    aspect-ratio: 4 / 5;
+    min-height: clamp(320px, 62vw, 460px);
+    aspect-ratio: 16 / 10;
   }
 
   .work-carousel-slide {

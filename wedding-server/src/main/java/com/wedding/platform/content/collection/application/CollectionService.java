@@ -15,9 +15,6 @@ import com.wedding.platform.content.collection.persistence.repository.WorkCollec
 import com.wedding.platform.content.collection.web.CollectionDtos;
 import com.wedding.platform.content.media.persistence.entity.CollectionPhoto;
 import com.wedding.platform.content.media.persistence.repository.CollectionPhotoRepository;
-import com.wedding.platform.content.project.persistence.entity.WeddingProject;
-import com.wedding.platform.content.project.persistence.repository.ProjectCreatorRepository;
-import com.wedding.platform.content.project.persistence.repository.WeddingProjectRepository;
 import com.wedding.platform.content.review.application.ReviewRevisionService;
 import com.wedding.platform.content.review.persistence.entity.ReviewTargetType;
 import com.wedding.platform.content.shared.ContentVisibility;
@@ -39,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -59,8 +57,6 @@ public class CollectionService {
     private final CollectionTagRepository collectionTagRepository;
     private final ContentCategoryRepository categoryRepository;
     private final ContentTagRepository tagRepository;
-    private final WeddingProjectRepository projectRepository;
-    private final ProjectCreatorRepository projectCreatorRepository;
     private final CollectionPhotoRepository photoRepository;
     private final SystemUserRepository userRepository;
     private final AuditLogService auditLogService;
@@ -73,8 +69,6 @@ public class CollectionService {
             CollectionTagRepository collectionTagRepository,
             ContentCategoryRepository categoryRepository,
             ContentTagRepository tagRepository,
-            WeddingProjectRepository projectRepository,
-            ProjectCreatorRepository projectCreatorRepository,
             CollectionPhotoRepository photoRepository,
             SystemUserRepository userRepository,
             AuditLogService auditLogService,
@@ -86,8 +80,6 @@ public class CollectionService {
         this.collectionTagRepository = collectionTagRepository;
         this.categoryRepository = categoryRepository;
         this.tagRepository = tagRepository;
-        this.projectRepository = projectRepository;
-        this.projectCreatorRepository = projectCreatorRepository;
         this.photoRepository = photoRepository;
         this.userRepository = userRepository;
         this.auditLogService = auditLogService;
@@ -118,15 +110,20 @@ public class CollectionService {
     ) {
         SystemUser actor = getActor(operatorId);
         requireCollectionAccount(actor);
-        WeddingProject project = request.projectId() == null
-                ? null
-                : getAccessibleProject(actor, request.projectId());
         ContentCategory category = getSelectableCategory(request.categoryId(), null);
         LinkedHashSet<Long> tagIds = distinctTagIds(request.tagIds());
         loadSelectableTags(tagIds, Set.of());
 
         WorkCollection collection = new WorkCollection();
-        applyFields(collection, project, request.title(), request.description(), category);
+        applyFields(
+                collection,
+                request.title(),
+                request.description(),
+                request.eventDate(),
+                request.regionCode(),
+                request.locationText(),
+                category
+        );
         collection.setVisibility(ContentVisibility.HIDDEN);
         collection.setReviewStatus(ReviewStatus.DRAFT);
         collection.setPublishStatus(PublishStatus.UNPUBLISHED);
@@ -155,7 +152,6 @@ public class CollectionService {
             int page,
             int size,
             String keyword,
-            Long projectId,
             Long categoryId
     ) {
         SystemUser actor = getActor(operatorId);
@@ -167,9 +163,9 @@ public class CollectionService {
         PageRequest pageRequest = PageRequest.of(page, size);
         String normalizedKeyword = trimToNull(keyword);
         Page<WorkCollection> result = isAdmin(actor)
-                ? collectionRepository.findAllCollections(projectId, categoryId, normalizedKeyword, pageRequest)
+                ? collectionRepository.findAllCollections(categoryId, normalizedKeyword, pageRequest)
                 : collectionRepository.findAccessibleCollections(
-                        operatorId, projectId, categoryId, normalizedKeyword, pageRequest);
+                        operatorId, categoryId, normalizedKeyword, pageRequest);
         return new CollectionDtos.CollectionPageResponse(
                 result.getContent().stream().map(this::toResponse).toList(),
                 result.getNumber(),
@@ -202,16 +198,6 @@ public class CollectionService {
         requireEditable(collection);
         requireVersion(collection, request.version());
 
-        WeddingProject project = request.projectId() == null
-                ? null
-                : getAccessibleProject(actor, request.projectId());
-        List<CollectionCreator> currentCreators = collectionCreatorRepository.findAllByCollectionId(collectionId);
-        if (project != null) {
-            requireProjectParticipants(project, currentCreators.stream()
-                    .map(relation -> relation.getId().getCreatorUserId())
-                    .collect(Collectors.toCollection(LinkedHashSet::new)));
-        }
-
         ContentCategory category = getSelectableCategory(request.categoryId(), collection.getCategoryId());
         LinkedHashSet<Long> existingTagIds = collectionTagRepository.findAllByCollectionId(collectionId).stream()
                 .map(relation -> relation.getId().getTagId())
@@ -219,14 +205,22 @@ public class CollectionService {
         LinkedHashSet<Long> tagIds = distinctTagIds(request.tagIds());
         loadSelectableTags(tagIds, existingTagIds);
 
-        if (!collectionDetailsChanged(collection, project, request, category, existingTagIds, tagIds)) {
+        if (!collectionDetailsChanged(collection, request, category, existingTagIds, tagIds)) {
             return toResponse(collection);
         }
         List<CollectionPhoto> activePhotos = photoRepository
                 .findAllByCollectionIdAndDeletedFalseOrderBySortOrderAscIdAsc(collectionId);
         reviewRevisionService.ensureCollectionBaseline(collection, activePhotos);
         reviewRevisionService.cancelPendingSubmission(ReviewTargetType.COLLECTION, collectionId, operatorId);
-        applyFields(collection, project, request.title(), request.description(), category);
+        applyFields(
+                collection,
+                request.title(),
+                request.description(),
+                request.eventDate(),
+                request.regionCode(),
+                request.locationText(),
+                category
+        );
         replaceTags(collectionId, tagIds);
         markContentChanged(collection, operatorId);
         collection.setUpdatedBy(operatorId);
@@ -295,13 +289,6 @@ public class CollectionService {
         }
         validateActiveCreators(creatorIdsToValidate);
 
-        if (collection.getProjectId() != null) {
-            WeddingProject project = projectRepository.findByIdAndDeletedFalse(collection.getProjectId())
-                    .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "COLLECTION_PROJECT_INVALID",
-                            "The linked wedding project is not available"));
-            requireProjectParticipants(project, desiredCreatorIds);
-        }
-
         List<CollectionCreator> existingRelations = collectionCreatorRepository.findAllByCollectionId(collectionId);
         Map<Long, CollectionCreator> existingByCreatorId = existingRelations.stream()
                 .collect(Collectors.toMap(relation -> relation.getId().getCreatorUserId(), Function.identity()));
@@ -362,29 +349,33 @@ public class CollectionService {
 
     private void applyFields(
             WorkCollection collection,
-            WeddingProject project,
             String title,
             String description,
+            LocalDate eventDate,
+            String regionCode,
+            String locationText,
             ContentCategory category
     ) {
-        collection.setProjectId(project == null ? null : project.getId());
         collection.setTitle(title.trim());
         collection.setDescription(trimToNull(description));
+        collection.setEventDate(eventDate);
+        collection.setRegionCode(trimToNull(regionCode));
+        collection.setLocationText(trimToNull(locationText));
         collection.setCategoryId(category.getId());
     }
 
     private boolean collectionDetailsChanged(
             WorkCollection collection,
-            WeddingProject project,
             CollectionDtos.UpdateCollectionRequest request,
             ContentCategory category,
             Set<Long> existingTagIds,
             Set<Long> requestedTagIds
     ) {
-        Long projectId = project == null ? null : project.getId();
-        return !Objects.equals(collection.getProjectId(), projectId)
-                || !Objects.equals(collection.getTitle(), request.title().trim())
+        return !Objects.equals(collection.getTitle(), request.title().trim())
                 || !Objects.equals(collection.getDescription(), trimToNull(request.description()))
+                || !Objects.equals(collection.getEventDate(), request.eventDate())
+                || !Objects.equals(collection.getRegionCode(), trimToNull(request.regionCode()))
+                || !Objects.equals(collection.getLocationText(), trimToNull(request.locationText()))
                 || !Objects.equals(collection.getCategoryId(), category.getId())
                 || !existingTagIds.equals(requestedTagIds);
     }
@@ -458,29 +449,6 @@ public class CollectionService {
         }
     }
 
-    private WeddingProject getAccessibleProject(SystemUser actor, Long projectId) {
-        WeddingProject project = projectRepository.findByIdAndDeletedFalse(projectId)
-                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "COLLECTION_PROJECT_INVALID",
-                        "The linked wedding project is not available"));
-        if (!isAdmin(actor)
-                && !project.getCreatedBy().equals(actor.getId())
-                && !projectCreatorRepository.existsByProjectIdAndCreatorUserId(projectId, actor.getId())) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "COLLECTION_PROJECT_ACCESS_DENIED",
-                    "You do not participate in the linked wedding project");
-        }
-        return project;
-    }
-
-    private void requireProjectParticipants(WeddingProject project, Set<Long> creatorIds) {
-        boolean invalid = creatorIds.stream().anyMatch(creatorId ->
-                !project.getCreatedBy().equals(creatorId)
-                        && !projectCreatorRepository.existsByProjectIdAndCreatorUserId(project.getId(), creatorId));
-        if (invalid) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "COLLECTION_CREATOR_NOT_IN_PROJECT",
-                    "Every collection creator must participate in the linked wedding project");
-        }
-    }
-
     private CollectionDtos.CollectionResponse toResponse(WorkCollection collection) {
         ContentCategory category = categoryRepository.findById(collection.getCategoryId()).orElse(null);
         CollectionDtos.CategorySummary categorySummary = category == null
@@ -511,18 +479,13 @@ public class CollectionService {
                 .filter(response -> response != null)
                 .toList();
 
-        CollectionDtos.ProjectSummary projectSummary = collection.getProjectId() == null
-                ? null
-                : projectRepository.findById(collection.getProjectId())
-                .map(project -> new CollectionDtos.ProjectSummary(
-                        project.getId(), project.getProjectCode(), project.getTitle()))
-                .orElse(null);
-
         return new CollectionDtos.CollectionResponse(
                 collection.getId(),
-                projectSummary,
                 collection.getTitle(),
                 collection.getDescription(),
+                collection.getEventDate(),
+                collection.getRegionCode(),
+                collection.getLocationText(),
                 categorySummary,
                 tags,
                 collection.getCoverPhotoId(),

@@ -38,9 +38,9 @@ public class FeedbackController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) FeedbackReviewStatus reviewStatus,
             @RequestParam(required = false) FeedbackPublishStatus publishStatus,
-            @RequestParam(required = false) Long projectId
+            @RequestParam(required = false) Long collectionId
     ) {
-        return feedbackService.list(userId(jwt), page, size, reviewStatus, publishStatus, projectId);
+        return feedbackService.list(userId(jwt), page, size, reviewStatus, publishStatus, collectionId);
     }
 
     @GetMapping("/options")

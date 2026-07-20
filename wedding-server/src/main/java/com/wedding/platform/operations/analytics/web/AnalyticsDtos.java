@@ -33,7 +33,6 @@ public final class AnalyticsDtos {
     public record TrafficSummary(
             long pageViews,
             long uniqueVisitors,
-            long projectViews,
             long collectionViews,
             long inquiryCount,
             long creatorUploadCount,
@@ -48,7 +47,6 @@ public final class AnalyticsDtos {
             LocalDate date,
             long pageViews,
             long uniqueVisitors,
-            long projectViews,
             long collectionViews,
             long inquiryCount,
             long creatorUploadCount
@@ -69,7 +67,6 @@ public final class AnalyticsDtos {
             LocalDate endDate,
             TrafficSummary summary,
             List<DailyTrend> trend,
-            List<PopularContent> topProjects,
             List<PopularContent> topCollections
     ) {
     }

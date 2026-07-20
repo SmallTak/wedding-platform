@@ -51,7 +51,7 @@ async function submit() {
         nickname: form.nickname.trim(),
         password: form.password,
       })
-      await router.replace({ name: 'customer-projects' })
+      await router.replace({ name: 'customer-feedback' })
     } else {
       const user = await auth.login({
         mobile: form.mobile.trim(),
@@ -59,7 +59,7 @@ async function submit() {
       })
       const destination = user.setupRequired
         ? { name: 'customer-settings' }
-        : (route.query.redirect || { name: 'customer-projects' })
+        : (route.query.redirect || { name: 'customer-feedback' })
       await router.replace(destination)
     }
   } catch (error) {

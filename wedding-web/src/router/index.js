@@ -7,8 +7,6 @@ import { useCustomerAuthStore } from '../stores/customerAuth'
 const trackedPublicRoutes = new Set([
   'home',
   'collection-detail',
-  'project-list',
-  'project-detail',
   'reviews',
 ])
 
@@ -29,22 +27,6 @@ const router = createRouter({
       component: () => import('../views/CollectionDetailView.vue'),
       meta: {
         title: '婚礼作品',
-      },
-    },
-    {
-      path: '/projects',
-      name: 'project-list',
-      component: () => import('../views/ProjectListView.vue'),
-      meta: {
-        title: '婚礼项目',
-      },
-    },
-    {
-      path: '/projects/:projectId',
-      name: 'project-detail',
-      component: () => import('../views/ProjectDetailView.vue'),
-      meta: {
-        title: '婚礼项目',
       },
     },
     {
@@ -72,18 +54,12 @@ const router = createRouter({
       component: () => import('../layouts/CustomerCenterLayout.vue'),
       meta: { customer: true },
       children: [
-        { path: '', redirect: { name: 'customer-projects' } },
+        { path: '', redirect: { name: 'customer-feedback' } },
         {
           path: 'messages',
           name: 'customer-messages',
           component: () => import('../views/customer/CustomerMessagesView.vue'),
           meta: { title: '站内消息', customer: true },
-        },
-        {
-          path: 'projects',
-          name: 'customer-projects',
-          component: () => import('../views/customer/CustomerProjectsView.vue'),
-          meta: { title: '项目关联', customer: true },
         },
         {
           path: 'feedback',
@@ -114,7 +90,7 @@ router.beforeEach(async (to) => {
       if (!auth.user) await auth.fetchCurrentUser()
       return auth.setupRequired
         ? { name: 'customer-settings' }
-        : { name: 'customer-projects' }
+        : { name: 'customer-feedback' }
     } catch {
       auth.logout()
       return true

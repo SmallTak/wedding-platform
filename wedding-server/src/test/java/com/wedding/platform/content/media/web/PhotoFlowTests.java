@@ -274,7 +274,6 @@ class PhotoFlowTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "projectId": null,
                                   "title": "%s",
                                   "description": "Collection photo integration test",
                                   "categoryId": %d,

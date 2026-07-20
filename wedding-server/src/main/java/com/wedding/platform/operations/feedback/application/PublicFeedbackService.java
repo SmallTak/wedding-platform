@@ -1,7 +1,7 @@
 package com.wedding.platform.operations.feedback.application;
 
-import com.wedding.platform.content.project.persistence.entity.WeddingProject;
-import com.wedding.platform.content.project.persistence.repository.WeddingProjectRepository;
+import com.wedding.platform.content.collection.persistence.entity.WorkCollection;
+import com.wedding.platform.content.collection.persistence.repository.WorkCollectionRepository;
 import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
 import com.wedding.platform.operations.feedback.persistence.entity.CustomerFeedback;
@@ -33,18 +33,18 @@ public class PublicFeedbackService {
 
     private final CustomerFeedbackRepository feedbackRepository;
     private final FeedbackReplyRepository replyRepository;
-    private final WeddingProjectRepository projectRepository;
+    private final WorkCollectionRepository collectionRepository;
     private final SystemUserRepository userRepository;
 
     public PublicFeedbackService(
             CustomerFeedbackRepository feedbackRepository,
             FeedbackReplyRepository replyRepository,
-            WeddingProjectRepository projectRepository,
+            WorkCollectionRepository collectionRepository,
             SystemUserRepository userRepository
     ) {
         this.feedbackRepository = feedbackRepository;
         this.replyRepository = replyRepository;
-        this.projectRepository = projectRepository;
+        this.collectionRepository = collectionRepository;
         this.userRepository = userRepository;
     }
 
@@ -71,9 +71,9 @@ public class PublicFeedbackService {
     }
 
     @Transactional(readOnly = true)
-    public List<PublicFeedbackDtos.Feedback> projectFeedback(Long projectId) {
-        List<CustomerFeedback> feedback = feedbackRepository.findPublicFeedbackByProject(
-                projectId,
+    public List<PublicFeedbackDtos.Feedback> collectionFeedback(Long collectionId) {
+        List<CustomerFeedback> feedback = feedbackRepository.findPublicFeedbackByCollection(
+                collectionId,
                 FeedbackReviewStatus.APPROVED,
                 FeedbackPublishStatus.PUBLISHED,
                 PublishStatus.PUBLISHED,
@@ -116,14 +116,14 @@ public class PublicFeedbackService {
                 || FeedbackPublishStatus.PUBLISHED != feedback.getPublishStatus()) {
             return false;
         }
-        return projectRepository.findByIdAndDeletedFalse(feedback.getProjectId())
-                .filter(project -> PublishStatus.PUBLISHED == project.getPublishStatus())
-                .filter(project -> ContentVisibility.PUBLIC == project.getVisibility())
+        return collectionRepository.findByIdAndDeletedFalse(feedback.getCollectionId())
+                .filter(collection -> PublishStatus.PUBLISHED == collection.getPublishStatus())
+                .filter(collection -> ContentVisibility.PUBLIC == collection.getVisibility())
                 .isPresent();
     }
 
     private PublicFeedbackDtos.Feedback toPublic(CustomerFeedback feedback, FeedbackReply reply) {
-        WeddingProject project = projectRepository.findById(feedback.getProjectId()).orElse(null);
+        WorkCollection collection = collectionRepository.findById(feedback.getCollectionId()).orElse(null);
         SystemUser creator = userRepository.findById(feedback.getCreatorUserId()).orElse(null);
         List<String> roles = creator == null
                 ? List.of()
@@ -139,8 +139,8 @@ public class PublicFeedbackService {
                 : null;
         return new PublicFeedbackDtos.Feedback(
                 feedback.getId(),
-                feedback.getProjectId(),
-                project == null ? null : project.getTitle(),
+                feedback.getCollectionId(),
+                collection == null ? null : collection.getTitle(),
                 feedback.getCreatorUserId(),
                 creator == null ? null : creator.getDisplayName(),
                 roles,

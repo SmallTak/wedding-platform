@@ -102,7 +102,7 @@ async function deleteCreator(creator) {
   const label = creator.displayName || creator.mobile
   try {
     await ElMessageBox.confirm(
-      `确认删除“${label}”？该账号将立即无法登录，但历史项目、作品集和审计记录会保留。`,
+      `确认删除“${label}”？该账号将立即无法登录，但历史作品集和审计记录会保留。`,
       '删除创作者账号',
       {
         confirmButtonText: '确认删除',

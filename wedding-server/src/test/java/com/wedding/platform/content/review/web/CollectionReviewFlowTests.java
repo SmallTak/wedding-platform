@@ -113,7 +113,6 @@ class CollectionReviewFlowTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "projectId": null,
                                   "title": "Published Review Story",
                                   "description": "A collection moving through the complete review workflow",
                                   "categoryId": %d,
@@ -204,7 +203,7 @@ class CollectionReviewFlowTests {
                 .andExpect(jsonPath("$.collection.reviewStatus").value("PENDING"))
                 .andExpect(jsonPath(
                         "$.reviewHistory.currentItems[?(@.itemType == 'FIELD' && @.status == 'APPROVED')]",
-                        hasSize(7)
+                        hasSize(9)
                 ))
                 .andReturn().getResponse().getContentAsString();
         Number approvedFieldsVersion = JsonPath.read(approvedFieldsJson, "$.collection.version");
@@ -338,9 +337,9 @@ class CollectionReviewFlowTests {
                 .andExpect(jsonPath("$.photos.length()").value(1))
                 .andExpect(jsonPath("$.photos[0].id").value(coverPhotoId.longValue()))
                 .andExpect(jsonPath("$.collection.coverOriginalUrl")
-                        .value(org.hamcrest.Matchers.startsWith("/media/branded/")))
+                        .value(org.hamcrest.Matchers.startsWith("/api/public/images/photos/")))
                 .andExpect(jsonPath("$.photos[0].originalUrl")
-                        .value(org.hamcrest.Matchers.startsWith("/media/branded/")))
+                        .value(org.hamcrest.Matchers.startsWith("/api/public/images/photos/")))
                 .andExpect(jsonPath("$.photos[0].previewUrl")
                         .value(org.hamcrest.Matchers.startsWith("/media/previews/")))
                 .andExpect(jsonPath("$.photos[0].originalPath").doesNotExist());
@@ -357,7 +356,6 @@ class CollectionReviewFlowTests {
                         .content("""
                                 {
                                   "version": %d,
-                                  "projectId": null,
                                   "title": "Locked Story",
                                   "description": "Should remain locked",
                                   "categoryId": %d,
@@ -394,7 +392,6 @@ class CollectionReviewFlowTests {
                         .content("""
                                 {
                                   "version": %d,
-                                  "projectId": null,
                                   "title": "Published Review Story",
                                   "description": "A collection moving through the complete review workflow",
                                   "categoryId": %d,
@@ -453,7 +450,6 @@ class CollectionReviewFlowTests {
                         .content("""
                                 {
                                   "version": %d,
-                                  "projectId": null,
                                   "title": "Offline Editable Story",
                                   "description": "Editing is available again after offline",
                                   "categoryId": %d,
@@ -610,7 +606,6 @@ class CollectionReviewFlowTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "projectId": null,
                                   "title": "%s",
                                   "description": "Approved offline photo regression fixture",
                                   "categoryId": %d,

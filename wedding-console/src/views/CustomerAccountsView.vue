@@ -10,19 +10,13 @@ import {
   Search,
   X,
 } from '@lucide/vue'
-import {
-  customerAdminApi,
-  customerProjectApplicationApi,
-} from '../api/operations'
+import { customerAdminApi } from '../api/operations'
 import { apiErrorMessage, formatDateTime } from '../utils/content'
 
 const activeTab = ref('accounts')
 const loadingAccounts = ref(false)
-const loadingApplications = ref(false)
 const customers = ref([])
 const query = ref('')
-const applications = ref([])
-const applicationStatus = ref('PENDING')
 const page = ref(0)
 const totalPages = ref(0)
 const totalElements = ref(0)
@@ -50,7 +44,7 @@ const applicationLabels = {
 }
 
 onMounted(async () => {
-  await Promise.all([loadCustomers(), loadApplications()])
+  await loadCustomers()
 })
 
 async function loadCustomers() {
@@ -62,24 +56,6 @@ async function loadCustomers() {
     ElMessage.error(apiErrorMessage(error, '客户账号加载失败'))
   } finally {
     loadingAccounts.value = false
-  }
-}
-
-async function loadApplications() {
-  loadingApplications.value = true
-  try {
-    const { data } = await customerProjectApplicationApi.list({
-      page: page.value,
-      size: 20,
-      status: applicationStatus.value || undefined,
-    })
-    applications.value = data.content
-    totalPages.value = data.totalPages
-    totalElements.value = data.totalElements
-  } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '项目关联申请加载失败'))
-  } finally {
-    loadingApplications.value = false
   }
 }
 
@@ -127,54 +103,6 @@ async function resetPassword(customer) {
   }
 }
 
-async function approve(application) {
-  try {
-    await ElMessageBox.confirm(
-      `确认将客户“${application.customer?.nickname || application.customer?.mobile}”关联到项目“${application.project?.title || application.project?.projectCode}”吗？`,
-      '通过关联申请',
-      {
-        confirmButtonText: '确认通过',
-        cancelButtonText: '取消',
-        type: 'success',
-      },
-    )
-    await customerProjectApplicationApi.approve(application.id, application.version)
-    ElMessage.success('项目关联申请已通过')
-    await loadApplications()
-  } catch (error) {
-    if (error === 'cancel' || error === 'close') return
-    ElMessage.error(apiErrorMessage(error, '申请审核失败'))
-  }
-}
-
-async function reject(application) {
-  try {
-    const { value } = await ElMessageBox.prompt(
-      '请说明项目编号不匹配、身份信息不足或其他驳回原因。客户可修正说明后重新提交。',
-      '驳回关联申请',
-      {
-        confirmButtonText: '确认驳回',
-        cancelButtonText: '取消',
-        inputType: 'textarea',
-        inputValidator: (input) => Boolean(input?.trim()) || '请输入驳回原因',
-      },
-    )
-    await customerProjectApplicationApi.reject(application.id, {
-      version: application.version,
-      reason: value.trim(),
-    })
-    ElMessage.success('项目关联申请已驳回')
-    await loadApplications()
-  } catch (error) {
-    if (error === 'cancel' || error === 'close') return
-    ElMessage.error(apiErrorMessage(error, '申请驳回失败'))
-  }
-}
-
-function runApplicationFilter() {
-  page.value = 0
-  loadApplications()
-}
 
 function changePage(nextPage) {
   page.value = nextPage
@@ -243,78 +171,6 @@ function formatDate(value) {
               </div>
             </article>
             <div v-if="!loadingAccounts && filteredCustomers.length === 0" class="empty-table">暂无匹配的客户账号</div>
-          </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="项目关联审核" name="applications">
-          <div class="customer-admin-guidance">
-            <CircleUserRound :size="19" />
-            <p>通过前核对客户申请说明、项目编号和项目资料。完全隐藏项目仍可建立关联，但客户中心不会展示项目标题、日期和地点。</p>
-          </div>
-          <div class="management-toolbar customer-application-toolbar">
-            <el-select v-model="applicationStatus" placeholder="申请状态" @change="runApplicationFilter">
-              <el-option label="全部申请" value="" />
-              <el-option label="待审核" value="PENDING" />
-              <el-option label="已通过" value="APPROVED" />
-              <el-option label="已驳回" value="REJECTED" />
-            </el-select>
-            <button class="icon-command" type="button" aria-label="刷新关联申请" title="刷新" @click="loadApplications">
-              <RefreshCw :size="17" />
-            </button>
-          </div>
-
-          <div v-loading="loadingApplications" class="management-table customer-application-table" role="table" aria-label="客户项目关联申请">
-            <div class="management-row management-table-head" role="row">
-              <span>客户</span><span>婚礼项目</span><span>申请说明</span><span>状态</span><span>申请时间</span><span>操作</span>
-            </div>
-            <article v-for="application in applications" :key="application.id" class="management-row" role="row">
-              <div class="primary-cell" data-label="客户">
-                <strong>{{ application.customer?.nickname || '未填写昵称' }}</strong>
-                <small>{{ application.customer?.mobile }}</small>
-              </div>
-              <div class="primary-cell" data-label="婚礼项目">
-                <strong>{{ application.project?.title || '项目已不可用' }}</strong>
-                <small>{{ application.project?.projectCode }} · {{ application.project?.locationText || '-' }}</small>
-              </div>
-              <div class="customer-application-note" data-label="申请说明">
-                <p>{{ application.applyNote }}</p>
-                <small v-if="application.rejectionReason" class="negative-text">
-                  驳回：{{ application.rejectionReason }}
-                </small>
-              </div>
-              <span data-label="状态" :class="['state-chip', application.status.toLowerCase()]">
-                {{ applicationLabels[application.status] }}
-              </span>
-              <time data-label="申请时间">{{ formatDateTime(application.createdAt) }}</time>
-              <div class="row-commands" data-label="操作">
-                <button
-                  v-if="application.status === 'PENDING'"
-                  type="button"
-                  aria-label="通过申请"
-                  title="通过申请"
-                  @click="approve(application)"
-                >
-                  <Check :size="16" />
-                </button>
-                <button
-                  v-if="application.status === 'PENDING'"
-                  class="danger-command"
-                  type="button"
-                  aria-label="驳回申请"
-                  title="驳回申请"
-                  @click="reject(application)"
-                >
-                  <X :size="16" />
-                </button>
-              </div>
-            </article>
-            <div v-if="!loadingApplications && applications.length === 0" class="empty-table">暂无符合条件的关联申请</div>
-          </div>
-
-          <div v-if="totalPages > 1" class="management-pagination">
-            <el-button :disabled="page === 0" @click="changePage(page - 1)">上一页</el-button>
-            <span>{{ page + 1 }} / {{ totalPages }}</span>
-            <el-button :disabled="page + 1 >= totalPages" @click="changePage(page + 1)">下一页</el-button>
           </div>
         </el-tab-pane>
       </el-tabs>

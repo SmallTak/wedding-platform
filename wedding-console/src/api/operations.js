@@ -72,18 +72,6 @@ export const customerAdminApi = {
   },
 }
 
-export const customerProjectApplicationApi = {
-  list(params = {}) {
-    return http.get('/admin/customer-project-applications', { params })
-  },
-  approve(applicationId, version) {
-    return http.post(`/admin/customer-project-applications/${applicationId}/approve`, { version })
-  },
-  reject(applicationId, payload) {
-    return http.post(`/admin/customer-project-applications/${applicationId}/reject`, payload)
-  },
-}
-
 export const analyticsApi = {
   overview(days = 30) {
     return http.get('/admin/analytics/overview', { params: { days } })

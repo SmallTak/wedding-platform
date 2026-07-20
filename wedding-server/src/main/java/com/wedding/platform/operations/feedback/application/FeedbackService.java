@@ -1,16 +1,11 @@
 package com.wedding.platform.operations.feedback.application;
 
-import com.wedding.platform.content.project.persistence.entity.ProjectCreator;
-import com.wedding.platform.content.project.persistence.entity.ProjectCustomerApplication;
-import com.wedding.platform.content.project.persistence.entity.WeddingProject;
-import com.wedding.platform.content.project.persistence.repository.ProjectCreatorRepository;
-import com.wedding.platform.content.project.persistence.repository.ProjectCustomerApplicationRepository;
-import com.wedding.platform.content.project.persistence.repository.WeddingProjectRepository;
+import com.wedding.platform.content.collection.persistence.entity.CollectionCreator;
+import com.wedding.platform.content.collection.persistence.entity.WorkCollection;
+import com.wedding.platform.content.collection.persistence.repository.CollectionCreatorRepository;
+import com.wedding.platform.content.collection.persistence.repository.WorkCollectionRepository;
 import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
-import com.wedding.platform.operations.notification.application.UserNotificationService;
-import com.wedding.platform.operations.notification.persistence.entity.UserNotificationRelatedType;
-import com.wedding.platform.operations.notification.persistence.entity.UserNotificationType;
 import com.wedding.platform.operations.feedback.persistence.entity.CustomerFeedback;
 import com.wedding.platform.operations.feedback.persistence.entity.FeedbackPublishStatus;
 import com.wedding.platform.operations.feedback.persistence.entity.FeedbackReply;
@@ -18,12 +13,13 @@ import com.wedding.platform.operations.feedback.persistence.entity.FeedbackRevie
 import com.wedding.platform.operations.feedback.persistence.repository.CustomerFeedbackRepository;
 import com.wedding.platform.operations.feedback.persistence.repository.FeedbackReplyRepository;
 import com.wedding.platform.operations.feedback.web.FeedbackDtos;
+import com.wedding.platform.operations.notification.application.UserNotificationService;
+import com.wedding.platform.operations.notification.persistence.entity.UserNotificationRelatedType;
+import com.wedding.platform.operations.notification.persistence.entity.UserNotificationType;
 import com.wedding.platform.platform.audit.AuditLogService;
 import com.wedding.platform.platform.web.ApiException;
 import com.wedding.platform.system.account.persistence.entity.ProfessionalRole;
-import com.wedding.platform.system.account.persistence.entity.CustomerProfile;
 import com.wedding.platform.system.account.persistence.entity.SystemUser;
-import com.wedding.platform.system.account.persistence.repository.CustomerProfileRepository;
 import com.wedding.platform.system.account.persistence.repository.SystemUserRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -33,7 +29,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 
@@ -41,35 +36,30 @@ import java.util.List;
 public class FeedbackService {
 
     private static final int MAX_PAGE_SIZE = 100;
+    private static final int OPTIONS_LIMIT = 500;
 
     private final CustomerFeedbackRepository feedbackRepository;
     private final FeedbackReplyRepository replyRepository;
-    private final WeddingProjectRepository projectRepository;
-    private final ProjectCreatorRepository projectCreatorRepository;
-    private final ProjectCustomerApplicationRepository projectCustomerApplicationRepository;
+    private final WorkCollectionRepository collectionRepository;
+    private final CollectionCreatorRepository collectionCreatorRepository;
     private final SystemUserRepository userRepository;
-    private final CustomerProfileRepository customerProfileRepository;
     private final UserNotificationService notificationService;
     private final AuditLogService auditLogService;
 
     public FeedbackService(
             CustomerFeedbackRepository feedbackRepository,
             FeedbackReplyRepository replyRepository,
-            WeddingProjectRepository projectRepository,
-            ProjectCreatorRepository projectCreatorRepository,
-            ProjectCustomerApplicationRepository projectCustomerApplicationRepository,
+            WorkCollectionRepository collectionRepository,
+            CollectionCreatorRepository collectionCreatorRepository,
             SystemUserRepository userRepository,
-            CustomerProfileRepository customerProfileRepository,
             UserNotificationService notificationService,
             AuditLogService auditLogService
     ) {
         this.feedbackRepository = feedbackRepository;
         this.replyRepository = replyRepository;
-        this.projectRepository = projectRepository;
-        this.projectCreatorRepository = projectCreatorRepository;
-        this.projectCustomerApplicationRepository = projectCustomerApplicationRepository;
+        this.collectionRepository = collectionRepository;
+        this.collectionCreatorRepository = collectionCreatorRepository;
         this.userRepository = userRepository;
-        this.customerProfileRepository = customerProfileRepository;
         this.notificationService = notificationService;
         this.auditLogService = auditLogService;
     }
@@ -81,27 +71,17 @@ public class FeedbackService {
             int size,
             FeedbackReviewStatus reviewStatus,
             FeedbackPublishStatus publishStatus,
-            Long projectId
+            Long collectionId
     ) {
         validatePage(page, size);
-        SystemUser actor = getActor(userId);
-        requireFeedbackAccount(actor);
-        Page<CustomerFeedback> result = isAdmin(actor)
-                ? feedbackRepository.findAllFeedback(
-                        reviewStatus,
-                        publishStatus,
-                        projectId,
-                        FeedbackReviewStatus.PENDING,
-                        FeedbackReviewStatus.REJECTED,
-                        PageRequest.of(page, size))
-                : feedbackRepository.findCreatorFeedback(
-                        userId,
-                        reviewStatus,
-                        publishStatus,
-                        projectId,
-                        FeedbackReviewStatus.PENDING,
-                        FeedbackReviewStatus.REJECTED,
-                        PageRequest.of(page, size));
+        requireAdmin(userId);
+        Page<CustomerFeedback> result = feedbackRepository.findAllFeedback(
+                reviewStatus,
+                publishStatus,
+                collectionId,
+                FeedbackReviewStatus.PENDING,
+                FeedbackReviewStatus.REJECTED,
+                PageRequest.of(page, size));
         return new FeedbackDtos.FeedbackPage(
                 result.getContent().stream().map(this::toResponse).toList(),
                 result.getNumber(),
@@ -113,24 +93,24 @@ public class FeedbackService {
 
     @Transactional(readOnly = true)
     public FeedbackDtos.FeedbackOptions options(Long userId) {
-        SystemUser actor = getActor(userId);
-        requireFeedbackAccount(actor);
-        List<WeddingProject> projects = isAdmin(actor)
-                ? projectRepository.findAllByDeletedFalseOrderByCreatedAtDesc()
-                : projectRepository.findAllAccessibleProjects(userId);
-        List<SystemUser> creators = isAdmin(actor)
-                ? userRepository.findAllByAccountTypeAndDeletedFalseOrderByCreatedAtDesc("CREATOR").stream()
-                        .filter(user -> "ACTIVE".equals(user.getAccountStatus()))
-                        .toList()
-                : List.of(actor);
+        requireAdmin(userId);
+        List<WorkCollection> collections = collectionRepository.findAllCollections(
+                        null,
+                        null,
+                        PageRequest.of(0, OPTIONS_LIMIT))
+                .getContent();
+        List<SystemUser> creators = userRepository.findAllByAccountTypeAndDeletedFalseOrderByCreatedAtDesc("CREATOR")
+                .stream()
+                .filter(user -> "ACTIVE".equals(user.getAccountStatus()))
+                .toList();
         return new FeedbackDtos.FeedbackOptions(
-                projects.stream().map(this::projectSummary).toList(),
+                collections.stream().map(this::collectionSummary).toList(),
                 creators.stream().map(this::creatorSummary).toList()
         );
     }
 
     @Transactional(readOnly = true)
-    public FeedbackDtos.FeedbackPage customerFeedback(
+    public FeedbackDtos.FeedbackPage customerList(
             Long customerId,
             int page,
             int size,
@@ -138,130 +118,23 @@ public class FeedbackService {
             FeedbackPublishStatus publishStatus
     ) {
         validatePage(page, size);
-        requireCustomer(customerId);
+        SystemUser customer = getActor(customerId);
+        if (!"CUSTOMER".equals(customer.getAccountType())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "CUSTOMER_ACCOUNT_REQUIRED",
+                    "Only customer accounts can view customer feedback");
+        }
         Page<CustomerFeedback> result = feedbackRepository.findCustomerFeedback(
                 customerId,
                 reviewStatus,
                 publishStatus,
-                PageRequest.of(page, size)
-        );
+                PageRequest.of(page, size));
         return new FeedbackDtos.FeedbackPage(
-                result.getContent().stream()
-                        .map(feedback -> toResponse(feedback, true))
-                        .toList(),
+                result.getContent().stream().map(this::toResponse).toList(),
                 result.getNumber(),
                 result.getSize(),
                 result.getTotalElements(),
                 result.getTotalPages()
         );
-    }
-
-    @Transactional(readOnly = true)
-    public FeedbackDtos.CustomerFeedbackOptions customerOptions(Long customerId) {
-        requireCustomer(customerId);
-        List<ProjectCustomerApplication> applications = projectCustomerApplicationRepository
-                .findAllByCustomerUserIdAndStatusAndDeletedFalseOrderByCreatedAtDesc(customerId, "APPROVED");
-        List<WeddingProject> projects = projectRepository.findAllById(
-                        applications.stream().map(ProjectCustomerApplication::getProjectId).toList())
-                .stream()
-                .filter(project -> !Boolean.TRUE.equals(project.getDeleted()))
-                .toList();
-
-        LinkedHashMap<Long, SystemUser> creators = new LinkedHashMap<>();
-        for (WeddingProject project : projects) {
-            userRepository.findById(project.getCreatedBy())
-                    .filter(this::isActiveCreator)
-                    .ifPresent(creator -> creators.put(creator.getId(), creator));
-            projectCreatorRepository.findAllByProjectId(project.getId()).stream()
-                    .map(ProjectCreator::getId)
-                    .map(id -> id.getCreatorUserId())
-                    .forEach(creatorId -> userRepository.findById(creatorId)
-                            .filter(this::isActiveCreator)
-                            .ifPresent(creator -> creators.put(creator.getId(), creator)));
-        }
-        return new FeedbackDtos.CustomerFeedbackOptions(
-                projects.stream().map(this::customerProjectSummary).toList(),
-                creators.values().stream().map(this::creatorSummary).toList()
-        );
-    }
-
-    @Transactional
-    public FeedbackDtos.FeedbackResponse createByCustomer(
-            Long customerId,
-            FeedbackDtos.CustomerFeedbackRequest request,
-            String ipAddress
-    ) {
-        SystemUser customer = requireCustomer(customerId);
-        WeddingProject project = getProject(request.projectId());
-        SystemUser creator = getCreator(request.creatorUserId());
-        requireCustomerSubmissionAccess(customerId, project, creator);
-
-        CustomerFeedback feedback = new CustomerFeedback();
-        applyCustomer(feedback, customer, request);
-        feedback.setCustomerUserId(customerId);
-        feedback.setSubmittedBy(customerId);
-        feedback.setReviewStatus(FeedbackReviewStatus.PENDING);
-        feedback.setPublishStatus(FeedbackPublishStatus.UNPUBLISHED);
-        feedback.setCreatedBy(customerId);
-        feedback.setUpdatedBy(customerId);
-        feedback = feedbackRepository.save(feedback);
-
-        notifyNewFeedback(customerId, feedback, "新的客户评价待审核");
-        auditLogService.record(
-                customerId,
-                customer.getAccountType(),
-                "FEEDBACK",
-                "CREATE_CUSTOMER_FEEDBACK",
-                "CUSTOMER_FEEDBACK",
-                feedback.getId(),
-                "Customer submitted feedback for review",
-                ipAddress
-        );
-        return toResponse(feedback, true);
-    }
-
-    @Transactional
-    public FeedbackDtos.FeedbackResponse updateByCustomer(
-            Long customerId,
-            Long feedbackId,
-            FeedbackDtos.CustomerFeedbackRequest request,
-            String ipAddress
-    ) {
-        SystemUser customer = requireCustomer(customerId);
-        CustomerFeedback feedback = getFeedback(feedbackId);
-        if (!customerId.equals(feedback.getCustomerUserId())) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "FEEDBACK_EDIT_ACCESS_DENIED",
-                    "Customers can only update feedback they submitted");
-        }
-        requireVersion(feedback.getVersion(), request.version(), "FEEDBACK_VERSION_CONFLICT");
-        if (FeedbackPublishStatus.PUBLISHED == feedback.getPublishStatus()
-                || FeedbackPublishStatus.OFFLINE == feedback.getPublishStatus()) {
-            throw new ApiException(HttpStatus.CONFLICT, "FEEDBACK_PUBLISHED_LOCKED",
-                    "Published or offline feedback cannot be edited");
-        }
-        WeddingProject project = getProject(request.projectId());
-        SystemUser creator = getCreator(request.creatorUserId());
-        requireCustomerSubmissionAccess(customerId, project, creator);
-        applyCustomer(feedback, customer, request);
-        feedback.setReviewStatus(FeedbackReviewStatus.PENDING);
-        feedback.setRejectionReason(null);
-        feedback.setReviewedBy(null);
-        feedback.setReviewedAt(null);
-        feedback.setUpdatedBy(customerId);
-        feedback = feedbackRepository.save(feedback);
-
-        notifyNewFeedback(customerId, feedback, "客户评价已重新提交审核");
-        auditLogService.record(
-                customerId,
-                customer.getAccountType(),
-                "FEEDBACK",
-                "UPDATE_CUSTOMER_FEEDBACK",
-                "CUSTOMER_FEEDBACK",
-                feedbackId,
-                "Customer feedback updated and resubmitted",
-                ipAddress
-        );
-        return toResponse(feedback, true);
     }
 
     @Transactional
@@ -270,11 +143,10 @@ public class FeedbackService {
             FeedbackDtos.UpsertFeedbackRequest request,
             String ipAddress
     ) {
-        SystemUser actor = getActor(userId);
-        requireFeedbackAccount(actor);
-        WeddingProject project = getProject(request.projectId());
+        SystemUser admin = requireAdmin(userId);
+        WorkCollection collection = getCollection(request.collectionId());
         SystemUser creator = getCreator(request.creatorUserId());
-        requireSubmissionAccess(actor, project, creator);
+        requireCreatorInCollection(collection, creator);
 
         CustomerFeedback feedback = new CustomerFeedback();
         apply(feedback, request);
@@ -288,7 +160,7 @@ public class FeedbackService {
         notifyNewFeedback(userId, feedback, "新的客户评价待审核");
         auditLogService.record(
                 userId,
-                actor.getAccountType(),
+                admin.getAccountType(),
                 "FEEDBACK",
                 "CREATE_FEEDBACK",
                 "CUSTOMER_FEEDBACK",
@@ -306,10 +178,8 @@ public class FeedbackService {
             FeedbackDtos.UpsertFeedbackRequest request,
             String ipAddress
     ) {
-        SystemUser actor = getActor(userId);
-        requireFeedbackAccount(actor);
+        SystemUser admin = requireAdmin(userId);
         CustomerFeedback feedback = getFeedback(feedbackId);
-        requireFeedbackEditAccess(actor, feedback);
         requireVersion(feedback.getVersion(), request.version(), "FEEDBACK_VERSION_CONFLICT");
         if (FeedbackPublishStatus.PUBLISHED == feedback.getPublishStatus()
                 || FeedbackPublishStatus.OFFLINE == feedback.getPublishStatus()) {
@@ -317,9 +187,9 @@ public class FeedbackService {
                     "Published or offline feedback cannot be edited");
         }
 
-        WeddingProject project = getProject(request.projectId());
+        WorkCollection collection = getCollection(request.collectionId());
         SystemUser creator = getCreator(request.creatorUserId());
-        requireSubmissionAccess(actor, project, creator);
+        requireCreatorInCollection(collection, creator);
         apply(feedback, request);
         feedback.setReviewStatus(FeedbackReviewStatus.PENDING);
         feedback.setRejectionReason(null);
@@ -331,7 +201,7 @@ public class FeedbackService {
         notifyNewFeedback(userId, feedback, "客户评价已重新提交审核");
         auditLogService.record(
                 userId,
-                actor.getAccountType(),
+                admin.getAccountType(),
                 "FEEDBACK",
                 "UPDATE_FEEDBACK",
                 "CUSTOMER_FEEDBACK",
@@ -349,10 +219,8 @@ public class FeedbackService {
             Long version,
             String ipAddress
     ) {
-        SystemUser actor = getActor(userId);
-        requireFeedbackEditAccount(actor);
+        SystemUser admin = requireAdmin(userId);
         CustomerFeedback feedback = getFeedback(feedbackId);
-        requireFeedbackEditAccess(actor, feedback);
         requireVersion(feedback.getVersion(), version, "FEEDBACK_VERSION_CONFLICT");
         if (FeedbackPublishStatus.UNPUBLISHED != feedback.getPublishStatus()) {
             throw new ApiException(HttpStatus.CONFLICT, "FEEDBACK_WITHDRAW_LOCKED",
@@ -374,7 +242,7 @@ public class FeedbackService {
 
         auditLogService.record(
                 userId,
-                actor.getAccountType(),
+                admin.getAccountType(),
                 "FEEDBACK",
                 "WITHDRAW_FEEDBACK",
                 "CUSTOMER_FEEDBACK",
@@ -395,11 +263,11 @@ public class FeedbackService {
         CustomerFeedback feedback = getFeedback(feedbackId);
         requireVersion(feedback.getVersion(), request.version(), "FEEDBACK_VERSION_CONFLICT");
         requirePending(feedback);
-        WeddingProject project = getProject(feedback.getProjectId());
-        if (PublishStatus.PUBLISHED != project.getPublishStatus()
-                || ContentVisibility.PUBLIC != project.getVisibility()) {
-            throw new ApiException(HttpStatus.CONFLICT, "FEEDBACK_PROJECT_NOT_PUBLIC",
-                    "Feedback can only be published for a public wedding project");
+        WorkCollection collection = getCollection(feedback.getCollectionId());
+        if (PublishStatus.PUBLISHED != collection.getPublishStatus()
+                || ContentVisibility.PUBLIC != collection.getVisibility()) {
+            throw new ApiException(HttpStatus.CONFLICT, "FEEDBACK_COLLECTION_NOT_PUBLIC",
+                    "Feedback can only be published for a public work collection");
         }
 
         Instant now = Instant.now();
@@ -413,13 +281,6 @@ public class FeedbackService {
         feedback.setUpdatedBy(adminId);
         feedback = feedbackRepository.save(feedback);
 
-        if (feedback.getCustomerUserId() != null) {
-            notificationService.notifyFeedbackApproved(
-                    feedback.getCustomerUserId(),
-                    adminId,
-                    feedback.getId()
-            );
-        }
         notifyFeedbackCreator(feedback, adminId, UserNotificationType.FEEDBACK_APPROVED,
                 "客户评价已通过审核", "客户评价已通过审核并在官网公开展示。");
         auditLogService.record(
@@ -454,25 +315,8 @@ public class FeedbackService {
         feedback.setUpdatedBy(adminId);
         feedback = feedbackRepository.save(feedback);
 
-        if (feedback.getCustomerUserId() != null) {
-            notificationService.notifyFeedbackRejected(
-                    feedback.getCustomerUserId(),
-                    adminId,
-                    feedback.getId(),
-                    feedback.getRejectionReason()
-            );
-        }
-        if (isCreatorUser(feedback.getSubmittedBy())) {
-            notificationService.notifyUser(
-                    feedback.getSubmittedBy(),
-                    adminId,
-                    UserNotificationType.FEEDBACK_REJECTED,
-                    "客户评价未通过审核",
-                    "您提交的客户评价未通过审核。原因：" + feedback.getRejectionReason(),
-                    UserNotificationRelatedType.FEEDBACK,
-                    feedback.getId()
-            );
-        }
+        notifyFeedbackCreator(feedback, adminId, UserNotificationType.FEEDBACK_REJECTED,
+                "客户评价未通过审核", "客户评价未通过审核。原因：" + feedback.getRejectionReason());
         auditLogService.record(
                 adminId,
                 admin.getAccountType(),
@@ -505,14 +349,6 @@ public class FeedbackService {
         feedback.setUpdatedBy(adminId);
         feedback = feedbackRepository.save(feedback);
 
-        if (feedback.getCustomerUserId() != null) {
-            notificationService.notifyFeedbackOffline(
-                    feedback.getCustomerUserId(),
-                    adminId,
-                    feedback.getId(),
-                    feedback.getOfflineReason()
-            );
-        }
         notifyFeedbackCreator(feedback, adminId, UserNotificationType.FEEDBACK_OFFLINE,
                 "客户评价已下架", "该客户评价已从官网下架。原因：" + feedback.getOfflineReason());
         auditLogService.record(
@@ -530,26 +366,19 @@ public class FeedbackService {
 
     @Transactional
     public FeedbackDtos.FeedbackResponse upsertReply(
-            Long creatorId,
+            Long adminId,
             Long feedbackId,
             FeedbackDtos.UpsertReplyRequest request,
             String ipAddress
     ) {
-        SystemUser creator = getActor(creatorId);
-        if (!isCreator(creator)) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "FEEDBACK_REPLY_ACCESS_DENIED",
-                    "Only the reviewed creator can reply");
-        }
+        SystemUser admin = requireAdmin(adminId);
         CustomerFeedback feedback = getFeedback(feedbackId);
-        if (!feedback.getCreatorUserId().equals(creatorId)) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "FEEDBACK_REPLY_ACCESS_DENIED",
-                    "Only the reviewed creator can reply");
-        }
         if (FeedbackPublishStatus.PUBLISHED != feedback.getPublishStatus()) {
             throw new ApiException(HttpStatus.CONFLICT, "FEEDBACK_REPLY_NOT_AVAILABLE",
-                    "A reply can only be submitted for published feedback");
+                    "A reply can only be saved for published feedback");
         }
 
+        Instant now = Instant.now();
         FeedbackReply reply = replyRepository.findByFeedbackIdAndDeletedFalse(feedbackId).orElse(null);
         if (reply == null) {
             if (request.version() != null) {
@@ -558,40 +387,28 @@ public class FeedbackService {
             }
             reply = new FeedbackReply();
             reply.setFeedbackId(feedbackId);
-            reply.setCreatorUserId(creatorId);
-            reply.setCreatedBy(creatorId);
+            reply.setCreatorUserId(feedback.getCreatorUserId());
+            reply.setCreatedBy(adminId);
         } else {
             requireVersion(reply.getVersion(), request.version(), "FEEDBACK_REPLY_VERSION_CONFLICT");
-            if (FeedbackReviewStatus.APPROVED == reply.getReviewStatus()) {
-                throw new ApiException(HttpStatus.CONFLICT, "FEEDBACK_REPLY_PUBLISHED_LOCKED",
-                        "An approved reply cannot be edited");
-            }
         }
         reply.setContent(request.content().trim());
-        reply.setReviewStatus(FeedbackReviewStatus.PENDING);
+        reply.setReviewStatus(FeedbackReviewStatus.APPROVED);
         reply.setRejectionReason(null);
-        reply.setReviewedBy(null);
-        reply.setReviewedAt(null);
-        reply.setPublishedAt(null);
-        reply.setUpdatedBy(creatorId);
+        reply.setReviewedBy(adminId);
+        reply.setReviewedAt(now);
+        reply.setPublishedAt(now);
+        reply.setUpdatedBy(adminId);
         replyRepository.save(reply);
 
-        notificationService.notifyAdmins(
-                creatorId,
-                UserNotificationType.FEEDBACK_REPLY_SUBMITTED,
-                "新的创作者评价回复待审核",
-                "创作者提交了新的评价回复，请及时审核。",
-                UserNotificationRelatedType.FEEDBACK_REPLY,
-                reply.getId()
-        );
         auditLogService.record(
-                creatorId,
-                creator.getAccountType(),
+                adminId,
+                admin.getAccountType(),
                 "FEEDBACK",
-                "SUBMIT_FEEDBACK_REPLY",
+                "UPSERT_FEEDBACK_REPLY",
                 "FEEDBACK_REPLY",
                 reply.getId(),
-                "Feedback reply submitted for review",
+                "Feedback reply saved by administrator",
                 ipAddress
         );
         return toResponse(feedback);
@@ -686,30 +503,11 @@ public class FeedbackService {
     }
 
     private void apply(CustomerFeedback feedback, FeedbackDtos.UpsertFeedbackRequest request) {
-        feedback.setProjectId(request.projectId());
+        feedback.setCollectionId(request.collectionId());
         feedback.setCreatorUserId(request.creatorUserId());
         feedback.setCustomerDisplayName(request.customerDisplayName().trim());
         feedback.setRating(request.rating());
         feedback.setContent(request.content().trim());
-    }
-
-    private void applyCustomer(
-            CustomerFeedback feedback,
-            SystemUser customer,
-            FeedbackDtos.CustomerFeedbackRequest request
-    ) {
-        CustomerProfile profile = customerProfileRepository.findById(customer.getId()).orElse(null);
-        String displayName = profile == null ? customer.getDisplayName() : profile.getNickname();
-        feedback.setProjectId(request.projectId());
-        feedback.setCreatorUserId(request.creatorUserId());
-        feedback.setCustomerDisplayName(
-                displayName == null || displayName.isBlank() ? "匿名客户" : displayName.trim());
-        feedback.setRating(request.rating());
-        feedback.setContent(request.content().trim());
-    }
-
-    private FeedbackDtos.FeedbackResponse toResponse(CustomerFeedback feedback) {
-        return toResponse(feedback, false);
     }
 
     private void notifyNewFeedback(Long actorId, CustomerFeedback feedback, String title) {
@@ -754,21 +552,13 @@ public class FeedbackService {
         }
     }
 
-    private boolean isCreatorUser(Long userId) {
-        return userRepository.findById(userId)
-                .map(this::isCreator)
-                .orElse(false);
-    }
-
-    private FeedbackDtos.FeedbackResponse toResponse(CustomerFeedback feedback, boolean maskHiddenProject) {
-        WeddingProject project = projectRepository.findById(feedback.getProjectId()).orElse(null);
+    private FeedbackDtos.FeedbackResponse toResponse(CustomerFeedback feedback) {
+        WorkCollection collection = collectionRepository.findById(feedback.getCollectionId()).orElse(null);
         SystemUser creator = userRepository.findById(feedback.getCreatorUserId()).orElse(null);
         FeedbackReply reply = replyRepository.findByFeedbackIdAndDeletedFalse(feedback.getId()).orElse(null);
         return new FeedbackDtos.FeedbackResponse(
                 feedback.getId(),
-                project == null
-                        ? null
-                        : (maskHiddenProject ? customerProjectSummary(project) : projectSummary(project)),
+                collection == null ? null : collectionSummary(collection),
                 creator == null ? null : creatorSummary(creator),
                 feedback.getCustomerDisplayName(),
                 feedback.getRating(),
@@ -788,33 +578,26 @@ public class FeedbackService {
         );
     }
 
-    private FeedbackDtos.ProjectSummary projectSummary(WeddingProject project) {
-        LinkedHashSet<Long> creatorIds = new LinkedHashSet<>();
-        creatorIds.add(project.getCreatedBy());
-        projectCreatorRepository.findAllByProjectId(project.getId()).stream()
-                .map(ProjectCreator::getId)
-                .map(id -> id.getCreatorUserId())
-                .forEach(creatorIds::add);
-        return new FeedbackDtos.ProjectSummary(
-                project.getId(),
-                project.getProjectCode(),
-                project.getTitle(),
-                List.copyOf(creatorIds)
+    private FeedbackDtos.CollectionSummary collectionSummary(WorkCollection collection) {
+        return new FeedbackDtos.CollectionSummary(
+                collection.getId(),
+                collection.getTitle(),
+                collection.getEventDate(),
+                collection.getLocationText(),
+                collectionCreatorIds(collection)
         );
     }
 
-    private FeedbackDtos.ProjectSummary customerProjectSummary(WeddingProject project) {
-        FeedbackDtos.ProjectSummary summary = projectSummary(project);
-        if (!Boolean.TRUE.equals(project.getDeleted())
-                && ContentVisibility.HIDDEN != project.getVisibility()) {
-            return summary;
-        }
-        return new FeedbackDtos.ProjectSummary(
-                summary.id(),
-                summary.projectCode(),
-                null,
-                summary.creatorUserIds()
-        );
+    private List<Long> collectionCreatorIds(WorkCollection collection) {
+        LinkedHashSet<Long> creatorIds = new LinkedHashSet<>();
+        userRepository.findById(collection.getCreatedBy())
+                .filter(this::isCreator)
+                .ifPresent(user -> creatorIds.add(user.getId()));
+        collectionCreatorRepository.findAllByCollectionId(collection.getId()).stream()
+                .map(CollectionCreator::getId)
+                .map(id -> id.getCreatorUserId())
+                .forEach(creatorIds::add);
+        return List.copyOf(creatorIds);
     }
 
     private FeedbackDtos.CreatorSummary creatorSummary(SystemUser creator) {
@@ -844,49 +627,12 @@ public class FeedbackService {
         );
     }
 
-    private void requireSubmissionAccess(SystemUser actor, WeddingProject project, SystemUser creator) {
-        boolean creatorParticipates = project.getCreatedBy().equals(creator.getId())
-                || projectCreatorRepository.existsByProjectIdAndCreatorUserId(project.getId(), creator.getId());
-        if (!creatorParticipates) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "FEEDBACK_CREATOR_NOT_IN_PROJECT",
-                    "The reviewed creator does not participate in this wedding project");
-        }
-        if (isCreator(actor)
-                && (!actor.getId().equals(creator.getId())
-                || (!project.getCreatedBy().equals(actor.getId())
-                && !projectCreatorRepository.existsByProjectIdAndCreatorUserId(project.getId(), actor.getId())))) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "FEEDBACK_ACCESS_DENIED",
-                    "Creators can only submit feedback about themselves in their own projects");
-        }
-    }
-
-    private void requireCustomerSubmissionAccess(
-            Long customerId,
-            WeddingProject project,
-            SystemUser creator
-    ) {
-        if (!projectCustomerApplicationRepository
-                .existsByProjectIdAndCustomerUserIdAndStatusAndDeletedFalse(
-                        project.getId(),
-                        customerId,
-                        "APPROVED")) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "CUSTOMER_PROJECT_LINK_REQUIRED",
-                    "The customer must be linked to this wedding project before submitting feedback");
-        }
-        boolean creatorParticipates = project.getCreatedBy().equals(creator.getId())
-                || projectCreatorRepository.existsByProjectIdAndCreatorUserId(project.getId(), creator.getId());
-        if (!creatorParticipates) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "FEEDBACK_CREATOR_NOT_IN_PROJECT",
-                    "The reviewed creator does not participate in this wedding project");
-        }
-    }
-
-    private void requireFeedbackEditAccess(SystemUser actor, CustomerFeedback feedback) {
-        if (isAdmin(actor) || feedback.getSubmittedBy().equals(actor.getId())) {
+    private void requireCreatorInCollection(WorkCollection collection, SystemUser creator) {
+        if (collectionCreatorIds(collection).contains(creator.getId())) {
             return;
         }
-        throw new ApiException(HttpStatus.FORBIDDEN, "FEEDBACK_EDIT_ACCESS_DENIED",
-                "Only an administrator or the original submitter can change this feedback");
+        throw new ApiException(HttpStatus.BAD_REQUEST, "FEEDBACK_CREATOR_NOT_IN_COLLECTION",
+                "The reviewed creator does not participate in this work collection");
     }
 
     private void requirePending(CustomerFeedback feedback) {
@@ -915,10 +661,10 @@ public class FeedbackService {
                         "Feedback reply was not found"));
     }
 
-    private WeddingProject getProject(Long projectId) {
-        return projectRepository.findByIdAndDeletedFalse(projectId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PROJECT_NOT_FOUND",
-                        "Wedding project was not found"));
+    private WorkCollection getCollection(Long collectionId) {
+        return collectionRepository.findByIdAndDeletedFalse(collectionId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "COLLECTION_NOT_FOUND",
+                        "Work collection was not found"));
     }
 
     private SystemUser getCreator(Long creatorId) {
@@ -940,34 +686,11 @@ public class FeedbackService {
 
     private SystemUser requireAdmin(Long userId) {
         SystemUser actor = getActor(userId);
-        if (!isAdmin(actor)) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "FEEDBACK_REVIEW_ACCESS_DENIED",
-                    "Only administrators can review customer feedback");
+        if (!"ADMIN".equals(actor.getAccountType())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FEEDBACK_ACCESS_DENIED",
+                    "Only administrators can manage customer feedback");
         }
         return actor;
-    }
-
-    private SystemUser requireCustomer(Long userId) {
-        SystemUser actor = getActor(userId);
-        if (!"CUSTOMER".equals(actor.getAccountType())) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "CUSTOMER_ACCOUNT_REQUIRED",
-                    "A customer account is required");
-        }
-        return actor;
-    }
-
-    private void requireFeedbackAccount(SystemUser actor) {
-        if (!isAdmin(actor) && !isCreator(actor)) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "FEEDBACK_ACCESS_DENIED",
-                    "This account cannot manage customer feedback");
-        }
-    }
-
-    private void requireFeedbackEditAccount(SystemUser actor) {
-        if (!isAdmin(actor) && !isCreator(actor) && !"CUSTOMER".equals(actor.getAccountType())) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "FEEDBACK_ACCESS_DENIED",
-                    "This account cannot change customer feedback");
-        }
     }
 
     private void requireVersion(Long currentVersion, Long requestVersion, String code) {
@@ -984,17 +707,7 @@ public class FeedbackService {
         }
     }
 
-    private boolean isAdmin(SystemUser user) {
-        return "ADMIN".equals(user.getAccountType());
-    }
-
     private boolean isCreator(SystemUser user) {
         return "CREATOR".equals(user.getAccountType());
-    }
-
-    private boolean isActiveCreator(SystemUser user) {
-        return isCreator(user)
-                && !Boolean.TRUE.equals(user.getDeleted())
-                && "ACTIVE".equals(user.getAccountStatus());
     }
 }

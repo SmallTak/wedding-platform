@@ -1,32 +1,5 @@
 import http from './http'
 
-export const projectApi = {
-  list(params = {}) {
-    return http.get('/projects', { params })
-  },
-  get(projectId) {
-    return http.get(`/projects/${projectId}`)
-  },
-  create(payload) {
-    return http.post('/projects', payload)
-  },
-  update(projectId, payload) {
-    return http.put(`/projects/${projectId}`, payload)
-  },
-  delete(projectId, version) {
-    return http.delete(`/projects/${projectId}`, { params: { version } })
-  },
-  assignCreators(projectId, payload) {
-    return http.put(`/admin/projects/${projectId}/creators`, payload)
-  },
-  submit(projectId, version) {
-    return http.post(`/projects/${projectId}/submit`, { version })
-  },
-  review(projectId) {
-    return http.get(`/projects/${projectId}/review`)
-  },
-}
-
 export const contentConfigApi = {
   categories() {
     return http.get('/admin/content/categories')
@@ -133,27 +106,6 @@ export const reviewApi = {
   },
   offline(collectionId, payload) {
     return http.post(`/admin/reviews/collections/${collectionId}/offline`, payload)
-  },
-  listProjects(params = {}) {
-    return http.get('/admin/reviews/projects', { params })
-  },
-  getProject(projectId) {
-    return http.get(`/admin/reviews/projects/${projectId}`)
-  },
-  reviewProjectFields(projectId, payload) {
-    return http.put(`/admin/reviews/projects/${projectId}/fields`, payload)
-  },
-  approveProject(projectId, version) {
-    return http.post(`/admin/reviews/projects/${projectId}/approve`, { version })
-  },
-  rejectProject(projectId, payload) {
-    return http.post(`/admin/reviews/projects/${projectId}/reject`, payload)
-  },
-  publishProject(projectId, payload) {
-    return http.post(`/admin/reviews/projects/${projectId}/publish`, payload)
-  },
-  offlineProject(projectId, payload) {
-    return http.post(`/admin/reviews/projects/${projectId}/offline`, payload)
   },
   dashboard() {
     return http.get('/admin/dashboard/overview')

@@ -46,12 +46,6 @@ const router = createRouter({
           meta: { title: '客户账号', permission: '/accounts/customers' },
         },
         {
-          path: 'projects',
-          name: 'projects',
-          component: () => import('../views/ProjectsView.vue'),
-          meta: { title: '婚礼项目', permission: '/content/projects' },
-        },
-        {
           path: 'collections',
           name: 'collections',
           component: () => import('../views/CollectionsView.vue'),

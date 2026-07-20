@@ -9,7 +9,6 @@ import {
   ChevronLeft,
   ChevronRight,
   EyeOff,
-  FolderCheck,
   RefreshCw,
   Star,
 } from '@lucide/vue'
@@ -29,16 +28,12 @@ const unreadOnly = ref(false)
 const unreadCount = computed(() => notificationStore.unreadCount)
 
 const typeLabels = {
-  PROJECT_LINK_APPROVED: '项目关联',
-  PROJECT_LINK_REJECTED: '项目关联',
   FEEDBACK_APPROVED: '客户评价',
   FEEDBACK_REJECTED: '客户评价',
   FEEDBACK_OFFLINE: '客户评价',
 }
 
 const typeIcons = {
-  PROJECT_LINK_APPROVED: FolderCheck,
-  PROJECT_LINK_REJECTED: FolderCheck,
   FEEDBACK_APPROVED: Star,
   FEEDBACK_REJECTED: Star,
   FEEDBACK_OFFLINE: EyeOff,
@@ -118,13 +113,12 @@ async function openNotification(item) {
 }
 
 function destinationFor(item) {
-  if (item.relatedType === 'PROJECT_APPLICATION') return { name: 'customer-projects' }
   if (item.relatedType === 'FEEDBACK') return { name: 'customer-feedback' }
   return null
 }
 
 function destinationLabel(item) {
-  return item.relatedType === 'PROJECT_APPLICATION' ? '查看关联记录' : '查看评价记录'
+  return item.relatedType === 'FEEDBACK' ? '查看评价记录' : '查看详情'
 }
 
 function changePage(nextPage) {

@@ -21,14 +21,14 @@ const isAdmin = computed(() => auth.user?.accountType === 'ADMIN')
 const loading = ref(false)
 const saving = ref(false)
 const feedback = ref([])
-const options = reactive({ projects: [], creators: [] })
+const options = reactive({ collections: [], creators: [] })
 const page = ref(0)
 const totalPages = ref(0)
 const totalElements = ref(0)
 const filters = reactive({
   reviewStatus: '',
   publishStatus: '',
-  projectId: null,
+  collectionId: null,
 })
 const dialogVisible = ref(false)
 const replyDialogVisible = ref(false)
@@ -36,7 +36,7 @@ const editingId = ref(null)
 const replyingFeedback = ref(null)
 const form = reactive({
   version: null,
-  projectId: null,
+  collectionId: null,
   creatorUserId: null,
   customerDisplayName: '',
   rating: 5,
@@ -62,16 +62,16 @@ const publishedCount = computed(() => feedback.value.filter((item) => item.publi
 const pendingReplyCount = computed(() =>
   feedback.value.filter((item) => item.reply?.reviewStatus === 'PENDING').length,
 )
-const selectedProject = computed(() =>
-  options.projects.find((project) => project.id === form.projectId),
+const selectedCollection = computed(() =>
+  options.collections.find((collection) => collection.id === form.collectionId),
 )
 const availableCreators = computed(() => {
-  const creatorIds = selectedProject.value?.creatorUserIds || []
+  const creatorIds = selectedCollection.value?.creatorUserIds || []
   return options.creators.filter((creator) => creatorIds.includes(creator.id))
 })
 
 watch(
-  () => form.projectId,
+  () => form.collectionId,
   () => {
     if (!isAdmin.value) {
       form.creatorUserId = auth.user?.id || null
@@ -90,7 +90,7 @@ onMounted(async () => {
 async function loadOptions() {
   try {
     const { data } = await feedbackApi.options()
-    options.projects = data.projects
+    options.collections = data.collections || []
     options.creators = data.creators
   } catch (error) {
     ElMessage.error(apiErrorMessage(error, '评价选项加载失败'))
@@ -105,7 +105,7 @@ async function loadFeedback() {
       size: 20,
       reviewStatus: filters.reviewStatus || undefined,
       publishStatus: filters.publishStatus || undefined,
-      projectId: filters.projectId || undefined,
+      collectionId: filters.collectionId || undefined,
     })
     feedback.value = data.content
     totalPages.value = data.totalPages
@@ -120,7 +120,7 @@ async function loadFeedback() {
 function resetForm() {
   Object.assign(form, {
     version: null,
-    projectId: options.projects[0]?.id || null,
+    collectionId: options.collections[0]?.id || null,
     creatorUserId: isAdmin.value ? null : auth.user?.id || null,
     customerDisplayName: '',
     rating: 5,
@@ -138,7 +138,7 @@ function openEditDialog(item) {
   editingId.value = item.id
   Object.assign(form, {
     version: item.version,
-    projectId: item.project?.id || null,
+    collectionId: item.collection?.id || null,
     creatorUserId: item.creator?.id || null,
     customerDisplayName: item.customerDisplayName,
     rating: item.rating,
@@ -148,13 +148,13 @@ function openEditDialog(item) {
 }
 
 async function saveFeedback() {
-  if (!form.projectId || !form.creatorUserId || !form.customerDisplayName.trim() || !form.content.trim()) {
-    ElMessage.warning('请完整填写项目、创作者、客户称呼和评价内容')
+  if (!form.collectionId || !form.creatorUserId || !form.customerDisplayName.trim() || !form.content.trim()) {
+    ElMessage.warning('请完整填写作品集、创作者、客户称呼和评价内容')
     return
   }
   saving.value = true
   const payload = {
-    projectId: form.projectId,
+    collectionId: form.collectionId,
     creatorUserId: form.creatorUserId,
     customerDisplayName: form.customerDisplayName.trim(),
     rating: form.rating,
@@ -334,12 +334,12 @@ function canReply(item) {
 
     <section class="dashboard-section management-panel">
       <div class="management-toolbar operations-toolbar">
-        <el-select v-model="filters.projectId" clearable filterable placeholder="全部项目" @change="runFilter">
+        <el-select v-model="filters.collectionId" clearable filterable placeholder="全部作品集" @change="runFilter">
           <el-option
-            v-for="project in options.projects"
-            :key="project.id"
-            :label="`${project.projectCode} · ${project.title}`"
-            :value="project.id"
+            v-for="collection in options.collections"
+            :key="collection.id"
+            :label="collection.title"
+            :value="collection.id"
           />
         </el-select>
         <el-select v-model="filters.reviewStatus" placeholder="全部审核状态" @change="runFilter">
@@ -366,7 +366,7 @@ function canReply(item) {
 
       <div class="management-table feedback-management-table" role="table" aria-label="客户评价">
         <div class="management-row management-table-head" role="row">
-          <span>评价</span><span>项目与创作者</span><span>星级</span><span>审核</span><span>公开</span><span>回复</span><span>操作</span>
+          <span>评价</span><span>作品集与创作者</span><span>星级</span><span>审核</span><span>公开</span><span>回复</span><span>操作</span>
         </div>
         <article v-for="item in feedback" :key="item.id" class="management-row" role="row">
           <div class="feedback-copy primary-cell" data-label="评价">
@@ -375,8 +375,8 @@ function canReply(item) {
             <small>{{ formatDateTime(item.createdAt) }}</small>
             <small v-if="item.rejectionReason" class="negative-text">驳回：{{ item.rejectionReason }}</small>
           </div>
-          <div class="feedback-target" data-label="项目与创作者">
-            <strong>{{ item.project?.title || '项目已不可用' }}</strong>
+          <div class="feedback-target" data-label="作品集与创作者">
+            <strong>{{ item.collection?.title || '作品集已不可用' }}</strong>
             <span>{{ item.creator?.displayName || '创作者已不可用' }}</span>
           </div>
           <div class="feedback-rating" data-label="星级" :aria-label="`${item.rating} 星`">
@@ -440,19 +440,19 @@ function canReply(item) {
     <el-dialog v-model="dialogVisible" :title="editingId ? '编辑客户评价' : '代提交客户评价'" width="620px" class="management-dialog">
       <form id="feedback-form" class="dialog-form" @submit.prevent="saveFeedback">
         <label>
-          婚礼项目
-          <el-select v-model="form.projectId" filterable placeholder="选择婚礼项目">
+          作品集
+          <el-select v-model="form.collectionId" filterable placeholder="选择作品集">
             <el-option
-              v-for="project in options.projects"
-              :key="project.id"
-              :label="`${project.projectCode} · ${project.title}`"
-              :value="project.id"
+              v-for="collection in options.collections"
+              :key="collection.id"
+              :label="collection.title"
+              :value="collection.id"
             />
           </el-select>
         </label>
         <label>
           被评价创作者
-          <el-select v-model="form.creatorUserId" :disabled="!isAdmin" placeholder="选择项目参与创作者">
+          <el-select v-model="form.creatorUserId" :disabled="!isAdmin" placeholder="选择作品集创作者">
             <el-option
               v-for="creator in availableCreators"
               :key="creator.id"

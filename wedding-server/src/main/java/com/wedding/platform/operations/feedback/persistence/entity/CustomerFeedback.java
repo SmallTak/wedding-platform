@@ -19,8 +19,8 @@ import java.time.Instant;
 @Table(name = "customer_feedback")
 public class CustomerFeedback extends BaseBusinessEntity {
 
-    @Column(name = "project_id", nullable = false)
-    private Long projectId;
+    @Column(name = "collection_id", nullable = false)
+    private Long collectionId;
 
     @Column(name = "creator_user_id", nullable = false)
     private Long creatorUserId;

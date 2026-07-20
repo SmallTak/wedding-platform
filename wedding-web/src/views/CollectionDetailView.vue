@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowLeft, X } from '@lucide/vue'
+import { ArrowLeft, ChevronLeft, ChevronRight, X } from '@lucide/vue'
 import { publicApi } from '../api/public'
 import BrandLogo from '../components/BrandLogo.vue'
 import ContentAccessGate from '../components/ContentAccessGate.vue'
@@ -16,6 +16,8 @@ const detail = ref(null)
 const activePhotoIndex = ref(null)
 const activePhotoUrl = ref('')
 let activePhotoRequest = 0
+let touchStartX = 0
+let touchStartY = 0
 
 const collection = computed(() => detail.value?.collection)
 const photos = computed(() => detail.value?.photos || [])
@@ -67,6 +69,42 @@ async function unlockCollection(password) {
       : '访问密码不正确。'
   } finally {
     accessLoading.value = false
+  }
+}
+
+function showPhoto(index) {
+  if (!photos.value.length) return
+  openPreview((index + photos.value.length) % photos.value.length)
+}
+
+function showNextPhoto() {
+  if (activePhotoIndex.value !== null) showPhoto(activePhotoIndex.value + 1)
+}
+
+function showPrevPhoto() {
+  if (activePhotoIndex.value !== null) showPhoto(activePhotoIndex.value - 1)
+}
+
+function handleLightboxKeydown(event) {
+  if (event.key === 'Escape') closePreview()
+  if (event.key === 'ArrowRight') showNextPhoto()
+  if (event.key === 'ArrowLeft') showPrevPhoto()
+}
+
+function handleTouchStart(event) {
+  const touch = event.changedTouches?.[0]
+  if (!touch) return
+  touchStartX = touch.clientX
+  touchStartY = touch.clientY
+}
+
+function handleTouchEnd(event) {
+  const touch = event.changedTouches?.[0]
+  if (!touch) return
+  const dx = touch.clientX - touchStartX
+  const dy = touch.clientY - touchStartY
+  if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    dx < 0 ? showNextPhoto() : showPrevPhoto()
   }
 }
 
@@ -142,13 +180,9 @@ function closePreview() {
           <p>{{ collection.description || '一组关于仪式、相聚与真实情绪的婚礼影像。' }}</p>
         </div>
         <dl>
-          <div v-if="collection.project">
-            <dt>项目</dt>
-            <dd>
-              <RouterLink :to="{ name: 'project-detail', params: { projectId: collection.project.id } }">
-                {{ collection.project.title }} · {{ collection.project.locationText }}
-              </RouterLink>
-            </dd>
+          <div v-if="collection.eventDate || collection.locationText">
+            <dt>日期地点</dt>
+            <dd>{{ [collection.eventDate, collection.locationText].filter(Boolean).join(' · ') }}</dd>
           </div>
           <div v-if="creatorLabel">
             <dt>创作者</dt>
@@ -186,11 +220,17 @@ function closePreview() {
       </section>
     </main>
 
-    <div v-if="activePhoto" class="image-lightbox" role="dialog" aria-modal="true" @click.self="closePreview">
-      <button type="button" aria-label="关闭预览" title="关闭预览" @click="closePreview">
+    <div v-if="activePhoto" class="image-lightbox" role="dialog" aria-modal="true" tabindex="-1" @click.self="closePreview" @keydown="handleLightboxKeydown" @touchstart.passive="handleTouchStart" @touchend.passive="handleTouchEnd">
+      <button class="lightbox-close" type="button" aria-label="关闭预览" title="关闭预览" @click="closePreview">
         <X :size="22" />
       </button>
+      <button v-if="photos.length > 1" class="lightbox-nav prev" type="button" aria-label="上一张" @click.stop="showPrevPhoto">
+        <ChevronLeft :size="30" />
+      </button>
       <img :src="activePhotoUrl" :alt="collection.title" />
+      <button v-if="photos.length > 1" class="lightbox-nav next" type="button" aria-label="下一张" @click.stop="showNextPhoto">
+        <ChevronRight :size="30" />
+      </button>
       <span>{{ activePhotoIndex + 1 }} / {{ photos.length }}</span>
     </div>
   </div>

@@ -4,7 +4,6 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Check,
   Eye,
-  FolderHeart,
   Images,
   RefreshCw,
   Rocket,
@@ -25,7 +24,6 @@ import {
   statusTone,
 } from '../utils/content'
 
-const targetType = ref('COLLECTION')
 const loading = ref(false)
 const detailLoading = ref(false)
 const mutating = ref(false)
@@ -46,10 +44,7 @@ const filters = reactive({
   publishStatus: null,
 })
 
-const isProject = computed(() => targetType.value === 'PROJECT')
-const currentTarget = computed(() => (
-  isProject.value ? detail.value?.project : detail.value?.collection
-))
+const currentTarget = computed(() => detail.value?.collection)
 const currentHistory = computed(() => detail.value?.reviewHistory)
 const fieldItems = computed(() => currentHistory.value?.currentItems.filter(
   (item) => item.itemType === 'FIELD',
@@ -58,14 +53,11 @@ const pendingFields = computed(() => fieldItems.value.filter((item) => item.stat
 const selectedFieldCount = computed(() => selectedFieldIds.value.filter(
   (id) => pendingFields.value.some((item) => item.id === id),
 ).length)
-const pendingPhotos = computed(() => isProject.value
-  ? []
-  : detail.value?.photoBatch.photos.filter((photo) => photo.reviewStatus === 'PENDING') || [])
+const pendingPhotos = computed(() => detail.value?.photoBatch.photos.filter((photo) => photo.reviewStatus === 'PENDING') || [])
 const selectedPhotoCount = computed(() => selectedPhotoIds.value.filter(
   (id) => pendingPhotos.value.some((photo) => photo.id === id),
 ).length)
-const photosFullyApproved = computed(() => isProject.value
-  || detail.value?.photoBatch.photos.every((photo) => photo.reviewStatus === 'APPROVED'))
+const photosFullyApproved = computed(() => detail.value?.photoBatch.photos.every((photo) => photo.reviewStatus === 'APPROVED'))
 const emptyQueueMessage = computed(() => (
   filters.reviewStatus === DEFAULT_REVIEW_STATUS
     && !filters.keyword.trim()
@@ -83,12 +75,6 @@ const canPublishTarget = computed(() => (
 
 onMounted(loadQueue)
 
-watch(targetType, () => {
-  page.value = 0
-  detailVisible.value = false
-  detail.value = null
-  loadQueue()
-})
 
 async function loadQueue() {
   loading.value = true
@@ -100,9 +86,7 @@ async function loadQueue() {
       reviewStatus: filters.reviewStatus || undefined,
       publishStatus: filters.publishStatus || undefined,
     }
-    const { data } = isProject.value
-      ? await reviewApi.listProjects(params)
-      : await reviewApi.list(params)
+    const { data } = await reviewApi.list(params)
     queue.value = data.content
     totalElements.value = data.totalElements
   } catch (error) {
@@ -138,9 +122,7 @@ async function openDetail(item) {
   selectedFieldIds.value = []
   selectedPhotoIds.value = []
   try {
-    const { data } = isProject.value
-      ? await reviewApi.getProject(item.id)
-      : await reviewApi.get(item.id)
+    const { data } = await reviewApi.get(item.id)
     detail.value = data
   } catch (error) {
     detailVisible.value = false
@@ -197,9 +179,7 @@ async function reviewSelectedFields(decision) {
       decision,
       reason,
     }
-    const { data } = isProject.value
-      ? await reviewApi.reviewProjectFields(currentTarget.value.id, payload)
-      : await reviewApi.reviewFields(currentTarget.value.id, payload)
+    const { data } = await reviewApi.reviewFields(currentTarget.value.id, payload)
     applyDetail(data)
     ElMessage.success(decision === 'APPROVE' ? '所选字段已通过' : '所选字段已驳回')
     await loadQueue()
@@ -240,10 +220,8 @@ async function reviewSelectedPhotos(decision) {
 async function approveRemainingFields() {
   if (!currentTarget.value) return
   await runTargetMutation(
-    () => isProject.value
-      ? reviewApi.approveProject(currentTarget.value.id, currentTarget.value.version)
-      : reviewApi.approve(currentTarget.value.id, currentTarget.value.version),
-    isProject.value ? '项目字段已全部通过' : '作品集已通过，当前可发布',
+    () => reviewApi.approve(currentTarget.value.id, currentTarget.value.version),
+    '作品集已通过，当前可发布',
     '内容通过失败',
   )
 }
@@ -251,20 +229,15 @@ async function approveRemainingFields() {
 async function rejectRemainingFields() {
   if (!currentTarget.value) return
   const reason = await askReason(
-    isProject.value ? '驳回项目字段' : '驳回作品集字段',
+    '驳回作品集字段',
     '填写全部剩余待审核字段的驳回原因',
   )
   if (!reason) return
   await runTargetMutation(
-    () => isProject.value
-      ? reviewApi.rejectProject(currentTarget.value.id, {
-          version: currentTarget.value.version,
-          reason,
-        })
-      : reviewApi.reject(currentTarget.value.id, {
-          version: currentTarget.value.version,
-          reason,
-        }),
+    () => reviewApi.reject(currentTarget.value.id, {
+      version: currentTarget.value.version,
+      reason,
+    }),
     '剩余待审核字段已驳回',
     '字段驳回失败',
   )
@@ -279,22 +252,15 @@ async function confirmPublication(settings) {
   if (!currentTarget.value) return
   const republishing = currentTarget.value.publishStatus === 'OFFLINE'
   await runTargetMutation(
-    () => isProject.value
-      ? reviewApi.publishProject(currentTarget.value.id, {
-          version: currentTarget.value.version,
-          ...settings,
-        })
-      : reviewApi.publish(currentTarget.value.id, {
-          version: currentTarget.value.version,
-          ...settings,
-          featured: currentTarget.value.featured || false,
-          pinned: currentTarget.value.pinned || false,
-          sortOrder: currentTarget.value.sortOrder || 0,
-        }),
-    isProject.value
-      ? (republishing ? '婚礼项目已重新上架' : '婚礼项目已发布')
-      : (republishing ? '作品集已重新上架' : '作品集已发布'),
-    isProject.value ? '婚礼项目发布失败' : '作品集发布失败',
+    () => reviewApi.publish(currentTarget.value.id, {
+      version: currentTarget.value.version,
+      ...settings,
+      featured: currentTarget.value.featured || false,
+      pinned: currentTarget.value.pinned || false,
+      sortOrder: currentTarget.value.sortOrder || 0,
+    }),
+    republishing ? '作品集已重新上架' : '作品集已发布',
+    '作品集发布失败',
   )
   if (currentTarget.value?.publishStatus === 'PUBLISHED') {
     publicationDialogVisible.value = false
@@ -307,7 +273,7 @@ async function offlineTarget() {
   try {
     const result = await ElMessageBox.prompt(
       '填写下架原因',
-      isProject.value ? '下架婚礼项目' : '下架作品集',
+      '下架作品集',
       {
         confirmButtonText: '确认下架',
         cancelButtonText: '取消',
@@ -320,17 +286,12 @@ async function offlineTarget() {
     return
   }
   await runTargetMutation(
-    () => isProject.value
-      ? reviewApi.offlineProject(currentTarget.value.id, {
-          version: currentTarget.value.version,
-          reason,
-        })
-      : reviewApi.offline(currentTarget.value.id, {
-          version: currentTarget.value.version,
-          reason,
-        }),
-    isProject.value ? '婚礼项目已下架' : '作品集已下架',
-    isProject.value ? '婚礼项目下架失败' : '作品集下架失败',
+    () => reviewApi.offline(currentTarget.value.id, {
+      version: currentTarget.value.version,
+      reason,
+    }),
+    '作品集已下架',
+    '作品集下架失败',
   )
 }
 
@@ -352,9 +313,7 @@ async function runTargetMutation(request, successMessage, fallback) {
 async function reloadDetail() {
   if (!currentTarget.value) return
   try {
-    const { data } = isProject.value
-      ? await reviewApi.getProject(currentTarget.value.id)
-      : await reviewApi.get(currentTarget.value.id)
+    const { data } = await reviewApi.get(currentTarget.value.id)
     applyDetail(data)
   } catch {
     detailVisible.value = false
@@ -376,27 +335,10 @@ function canPublish(item) {
     </section>
 
     <section class="dashboard-section management-panel">
-      <div class="review-target-switch" role="tablist" aria-label="审核内容类型">
-        <button
-          type="button"
-          :class="{ active: targetType === 'COLLECTION' }"
-          @click="targetType = 'COLLECTION'"
-        >
-          <Images :size="16" />作品集
-        </button>
-        <button
-          type="button"
-          :class="{ active: targetType === 'PROJECT' }"
-          @click="targetType = 'PROJECT'"
-        >
-          <FolderHeart :size="16" />婚礼项目
-        </button>
-      </div>
-
       <form class="management-toolbar review-toolbar" role="search" @submit.prevent="runSearch">
         <div class="table-search">
           <Search :size="17" />
-          <input v-model="filters.keyword" type="search" :placeholder="isProject ? '搜索婚礼项目' : '搜索作品集'" />
+          <input v-model="filters.keyword" type="search" :placeholder="'搜索作品集'" />
         </div>
         <el-select v-model="filters.reviewStatus" clearable placeholder="全部审核状态">
           <el-option label="待审核" value="PENDING" />
@@ -417,38 +359,30 @@ function canPublish(item) {
 
       <div class="management-table review-management-table" role="table" aria-label="内容审核队列">
         <div class="management-row management-table-head" role="row">
-          <span>{{ isProject ? '婚礼项目' : '作品集' }}</span>
+          <span>作品集</span>
           <span>字段状态</span>
-          <span>{{ isProject ? '地点' : '图片状态' }}</span>
+          <span>图片状态</span>
           <span>提交时间</span>
           <span>审核</span>
           <span>发布</span>
           <span>操作</span>
         </div>
         <article v-for="item in queue" :key="item.id" class="management-row" role="row">
-          <div class="primary-cell review-title-cell" :data-label="isProject ? '婚礼项目' : '作品集'">
-            <template v-if="!isProject">
-              <img v-if="item.coverThumbnailUrl" :src="item.coverThumbnailUrl" alt="" />
-              <span v-else class="collection-cover-placeholder"><ShieldCheck :size="18" /></span>
-            </template>
-            <span v-else class="collection-cover-placeholder"><FolderHeart :size="18" /></span>
+          <div class="primary-cell review-title-cell" data-label="作品集">
+            <img v-if="item.coverThumbnailUrl" :src="item.coverThumbnailUrl" alt="" />
+            <span v-else class="collection-cover-placeholder"><ShieldCheck :size="18" /></span>
             <div>
               <strong>{{ item.title }}</strong>
-              <small>{{ isProject ? item.projectCode : item.categoryName }}</small>
+              <small>{{ item.categoryName }}</small>
             </div>
           </div>
           <div class="review-photo-counts" data-label="字段状态">
             <span>{{ item.pendingFields }} 待审</span>
             <small>{{ item.rejectedFields }} 驳回 · {{ item.approvedFields }} 通过</small>
           </div>
-          <div class="review-photo-counts" :data-label="isProject ? '地点' : '图片状态'">
-            <template v-if="isProject">
-              <span>{{ item.locationText }}</span>
-            </template>
-            <template v-else>
-              <span>{{ item.totalPhotos }} 张</span>
-              <small>{{ item.pendingPhotos }} 待审 · {{ item.rejectedPhotos }} 驳回 · {{ item.approvedPhotos }} 通过</small>
-            </template>
+          <div class="review-photo-counts" data-label="图片状态">
+            <span>{{ item.totalPhotos }} 张</span>
+            <small>{{ item.pendingPhotos }} 待审 · {{ item.rejectedPhotos }} 驳回 · {{ item.approvedPhotos }} 通过</small>
           </div>
           <span data-label="提交时间">{{ formatDateTime(item.submittedAt || item.updatedAt) }}</span>
           <span data-label="审核" :class="['state-chip', statusTone(item.reviewStatus)]">
@@ -482,7 +416,7 @@ function canPublish(item) {
       <template #header>
         <div class="review-drawer-heading">
           <div>
-            <small>{{ isProject ? detail?.project.projectCode : detail?.collection.category?.name }}</small>
+            <small>{{ detail?.collection.category?.name }}</small>
             <h2>{{ currentTarget?.title || '审核详情' }}</h2>
           </div>
           <div v-if="currentTarget" class="photo-heading-states">
@@ -543,7 +477,7 @@ function canPublish(item) {
             </label>
           </section>
 
-          <template v-if="!isProject">
+          <template>
             <section class="review-section-heading">
               <div><strong>图片审核</strong><span>已选 {{ selectedPhotoCount }} 张</span></div>
               <div>
@@ -608,7 +542,7 @@ function canPublish(item) {
 
           <section class="review-publication-bar">
             <div>
-              <strong>{{ isProject ? '项目处理' : '作品集处理' }}</strong>
+              <strong>作品集处理</strong>
               <span>{{ currentTarget.description || '未填写内容介绍' }}</span>
             </div>
             <div>
@@ -650,7 +584,7 @@ function canPublish(item) {
 
     <PublicationDialog
       v-model="publicationDialogVisible"
-      :target-label="isProject ? '婚礼项目' : '作品集'"
+      target-label="作品集"
       :action-label="currentTarget?.publishStatus === 'OFFLINE' ? '重新上架' : '发布'"
       :loading="mutating"
       @submit="confirmPublication"

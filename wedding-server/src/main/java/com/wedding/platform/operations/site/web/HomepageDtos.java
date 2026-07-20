@@ -1,7 +1,6 @@
 package com.wedding.platform.operations.site.web;
 
 import com.wedding.platform.content.publication.web.PublicCollectionDtos;
-import com.wedding.platform.content.publication.web.PublicProjectDtos;
 import com.wedding.platform.operations.feedback.web.PublicFeedbackDtos;
 import com.wedding.platform.operations.site.persistence.entity.HomepageFeatureTargetType;
 import jakarta.validation.Valid;
@@ -51,16 +50,14 @@ public final class HomepageDtos {
     }
 
     public record FeatureOptions(
-            List<PublicProjectDtos.ProjectSummary> projects,
-            List<PublicCollectionDtos.CollectionSummary> collections,
             List<PublicFeedbackDtos.Feedback> feedback,
             List<FeatureItem> features
     ) {
     }
 
     public record CarouselItemRequest(
-            @NotNull(message = "Collection id is required")
-            Long collectionId,
+            @NotNull(message = "Photo id is required")
+            Long photoId,
             @NotNull(message = "Sort order is required")
             @PositiveOrZero(message = "Sort order must not be negative")
             Integer sortOrder,
@@ -77,12 +74,13 @@ public final class HomepageDtos {
 
     public record ReplaceCarouselRequest(
             @NotNull(message = "Carousel items are required")
-            @Size(max = 5, message = "Homepage carousel cannot contain more than 5 collections")
+            @Size(max = 5, message = "Homepage carousel cannot contain more than 5 photos")
             List<@Valid CarouselItemRequest> items
     ) {
     }
 
     public record CarouselCandidate(
+            Long photoId,
             Long collectionId,
             String collectionTitle,
             String description,
@@ -98,6 +96,7 @@ public final class HomepageDtos {
 
     public record CarouselItem(
             Long id,
+            Long photoId,
             Long collectionId,
             String collectionTitle,
             String description,
@@ -124,6 +123,7 @@ public final class HomepageDtos {
     }
 
     public record CarouselSlide(
+            Long photoId,
             Long collectionId,
             String collectionTitle,
             String description,
@@ -141,7 +141,6 @@ public final class HomepageDtos {
 
     public record PublicHomepage(
             List<CarouselSlide> carousel,
-            List<PublicProjectDtos.ProjectSummary> projects,
             List<PublicCollectionDtos.CollectionSummary> collections,
             List<PublicFeedbackDtos.Feedback> feedback
     ) {

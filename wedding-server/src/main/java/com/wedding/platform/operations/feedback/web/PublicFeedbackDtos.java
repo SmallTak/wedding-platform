@@ -13,8 +13,8 @@ public final class PublicFeedbackDtos {
 
     public record Feedback(
             Long id,
-            Long projectId,
-            String projectTitle,
+            Long collectionId,
+            String collectionTitle,
             Long creatorId,
             String creatorDisplayName,
             List<String> professionalRoles,

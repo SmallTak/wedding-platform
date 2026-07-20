@@ -21,6 +21,11 @@ public interface CollectionPhotoRepository extends JpaRepository<CollectionPhoto
             ReviewStatus reviewStatus
     );
 
+    Optional<CollectionPhoto> findFirstByCollectionIdAndDeletedFalseAndReviewStatusOrderBySortOrderAscIdAsc(
+            Long collectionId,
+            ReviewStatus reviewStatus
+    );
+
     @Query("""
             SELECT COALESCE(MAX(photo.sortOrder), -1)
             FROM CollectionPhoto photo

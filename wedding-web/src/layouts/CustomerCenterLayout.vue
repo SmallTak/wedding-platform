@@ -4,8 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Bell,
   CircleUserRound,
-  FolderKey,
-  House,
+    House,
   LogOut,
   Menu,
   MessageSquareText,
@@ -24,7 +23,6 @@ const menuOpen = ref(false)
 
 const navigation = [
   { label: '站内消息', name: 'customer-messages', icon: Bell },
-  { label: '项目关联', name: 'customer-projects', icon: FolderKey },
   { label: '我的评价', name: 'customer-feedback', icon: MessageSquareText },
   { label: '账号设置', name: 'customer-settings', icon: Settings },
 ]

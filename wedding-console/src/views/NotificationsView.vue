@@ -8,13 +8,11 @@ import {
   CheckCheck,
   ChevronLeft,
   ChevronRight,
-  FolderHeart,
   Images,
   Inbox,
   MessageSquareText,
   RefreshCw,
   ShieldCheck,
-  UsersRound,
 } from '@lucide/vue'
 import { notificationApi } from '../api/operations'
 import { useAuthStore } from '../stores/auth'
@@ -34,21 +32,13 @@ const totalElements = ref(0)
 const unreadOnly = ref(false)
 
 const typeLabels = {
-  PROJECT_REVIEW_TASK: '项目审核',
   COLLECTION_REVIEW_TASK: '作品审核',
-  PROJECT_REVIEW_APPROVED: '项目审核',
-  PROJECT_REVIEW_REJECTED: '项目审核',
   COLLECTION_REVIEW_APPROVED: '作品审核',
   COLLECTION_REVIEW_REJECTED: '作品审核',
-  PROJECT_PARTICIPANT_ADDED: '参与关系',
-  PROJECT_PARTICIPANT_REMOVED: '参与关系',
   COLLECTION_PARTICIPANT_ADDED: '参与关系',
   COLLECTION_PARTICIPANT_REMOVED: '参与关系',
-  PROJECT_PUBLISHED: '内容发布',
-  PROJECT_OFFLINE: '内容发布',
   COLLECTION_PUBLISHED: '内容发布',
   COLLECTION_OFFLINE: '内容发布',
-  CUSTOMER_PROJECT_APPLICATION_NEW: '客户关联',
   CUSTOMER_FEEDBACK_NEW: '客户评价',
   FEEDBACK_APPROVED: '客户评价',
   FEEDBACK_REJECTED: '客户评价',
@@ -133,18 +123,13 @@ async function openNotification(item) {
 }
 
 function destinationFor(item) {
-  if (item.relatedType === 'PROJECT_REVIEW') {
-    return auth.user?.accountType === 'CREATOR' ? { name: 'projects' } : { name: 'reviews' }
-  }
   if (item.relatedType === 'COLLECTION_REVIEW') {
     return auth.user?.accountType === 'CREATOR' ? { name: 'collections' } : { name: 'reviews' }
   }
-  if (item.relatedType === 'PROJECT_REVIEW' || item.relatedType === 'COLLECTION_REVIEW') {
+  if (item.relatedType === 'COLLECTION_REVIEW') {
     return { name: 'reviews' }
   }
-  if (item.relatedType === 'PROJECT') return { name: 'projects' }
   if (item.relatedType === 'COLLECTION') return { name: 'collections' }
-  if (item.relatedType === 'PROJECT_APPLICATION') return { name: 'customers' }
   if (item.relatedType === 'FEEDBACK' || item.relatedType === 'FEEDBACK_REPLY') {
     return { name: 'feedback' }
   }
@@ -153,10 +138,8 @@ function destinationFor(item) {
 }
 
 function iconFor(item) {
-  if (item.relatedType === 'PROJECT_REVIEW' || item.relatedType === 'COLLECTION_REVIEW') return ShieldCheck
-  if (item.relatedType === 'PROJECT') return FolderHeart
+  if (item.relatedType === 'COLLECTION_REVIEW') return ShieldCheck
   if (item.relatedType === 'COLLECTION') return Images
-  if (item.relatedType === 'PROJECT_APPLICATION') return UsersRound
   if (item.relatedType === 'FEEDBACK' || item.relatedType === 'FEEDBACK_REPLY') return MessageSquareText
   if (item.relatedType === 'INQUIRY') return Inbox
   return Bell

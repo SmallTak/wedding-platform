@@ -10,6 +10,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 public final class FeedbackDtos {
@@ -19,7 +20,7 @@ public final class FeedbackDtos {
 
     public record UpsertFeedbackRequest(
             @PositiveOrZero(message = "Version must not be negative") Long version,
-            @NotNull(message = "Project id is required") Long projectId,
+            @NotNull(message = "Collection id is required") Long collectionId,
             @NotNull(message = "Creator user id is required") Long creatorUserId,
             @NotBlank(message = "Customer display name is required")
             @Size(max = 100, message = "Customer display name is too long")
@@ -36,7 +37,7 @@ public final class FeedbackDtos {
 
     public record CustomerFeedbackRequest(
             @PositiveOrZero(message = "Version must not be negative") Long version,
-            @NotNull(message = "Project id is required") Long projectId,
+            @NotNull(message = "Collection id is required") Long collectionId,
             @NotNull(message = "Creator user id is required") Long creatorUserId,
             @NotNull(message = "Rating is required")
             @Min(value = 1, message = "Rating must be between 1 and 5")
@@ -83,10 +84,11 @@ public final class FeedbackDtos {
     ) {
     }
 
-    public record ProjectSummary(
+    public record CollectionSummary(
             Long id,
-            String projectCode,
             String title,
+            LocalDate eventDate,
+            String locationText,
             List<Long> creatorUserIds
     ) {
     }
@@ -110,7 +112,7 @@ public final class FeedbackDtos {
 
     public record FeedbackResponse(
             Long id,
-            ProjectSummary project,
+            CollectionSummary collection,
             CreatorSummary creator,
             String customerDisplayName,
             Integer rating,
@@ -140,13 +142,13 @@ public final class FeedbackDtos {
     }
 
     public record FeedbackOptions(
-            List<ProjectSummary> projects,
+            List<CollectionSummary> collections,
             List<CreatorSummary> creators
     ) {
     }
 
     public record CustomerFeedbackOptions(
-            List<ProjectSummary> projects,
+            List<CollectionSummary> collections,
             List<CreatorSummary> creators
     ) {
     }

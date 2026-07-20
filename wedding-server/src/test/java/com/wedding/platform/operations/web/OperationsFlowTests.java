@@ -9,11 +9,6 @@ import com.wedding.platform.content.media.persistence.entity.CollectionPhoto;
 import com.wedding.platform.content.media.persistence.entity.MediaAsset;
 import com.wedding.platform.content.media.persistence.repository.CollectionPhotoRepository;
 import com.wedding.platform.content.media.persistence.repository.MediaAssetRepository;
-import com.wedding.platform.content.project.persistence.entity.ProjectCreator;
-import com.wedding.platform.content.project.persistence.entity.ProjectCreatorId;
-import com.wedding.platform.content.project.persistence.entity.WeddingProject;
-import com.wedding.platform.content.project.persistence.repository.ProjectCreatorRepository;
-import com.wedding.platform.content.project.persistence.repository.WeddingProjectRepository;
 import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
 import com.wedding.platform.content.shared.ReviewStatus;
@@ -66,12 +61,6 @@ class OperationsFlowTests {
     private SystemRoleRepository roleRepository;
 
     @Autowired
-    private WeddingProjectRepository projectRepository;
-
-    @Autowired
-    private ProjectCreatorRepository projectCreatorRepository;
-
-    @Autowired
     private ContentCategoryRepository categoryRepository;
 
     @Autowired
@@ -98,14 +87,14 @@ class OperationsFlowTests {
     private SystemUser admin;
     private SystemUser creator;
     private SystemUser outsider;
-    private WeddingProject project;
+    private WorkCollection collection;
 
     @BeforeEach
     void createFixtures() {
         admin = ensureAccount(ADMIN_MOBILE, "ADMIN", "Operations Admin");
         creator = ensureAccount(CREATOR_MOBILE, "CREATOR", "Reviewed Creator");
         outsider = ensureAccount(OUTSIDER_MOBILE, "CREATOR", "Outside Creator");
-        project = ensurePublicProject();
+        collection = ensurePublicCollection();
     }
 
     @Test
@@ -115,16 +104,16 @@ class OperationsFlowTests {
         String outsiderToken = login(OUTSIDER_MOBILE);
 
         mockMvc.perform(post("/api/feedback")
-                .header("Authorization", bearer(outsiderToken))
+                .header("Authorization", bearer(adminToken))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(feedbackRequest(project.getId(), outsider.getId(), null, "不应创建")))
+                .content(feedbackRequest(collection.getId(), outsider.getId(), null, "不应创建")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("FEEDBACK_CREATOR_NOT_IN_PROJECT"));
+                .andExpect(jsonPath("$.code").value("FEEDBACK_CREATOR_NOT_IN_COLLECTION"));
 
         String createdJson = mockMvc.perform(post("/api/feedback")
-                        .header("Authorization", bearer(creatorToken))
+                        .header("Authorization", bearer(adminToken))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(feedbackRequest(project.getId(), creator.getId(), null, "记录了很多真诚瞬间")))
+                        .content(feedbackRequest(collection.getId(), creator.getId(), null, "记录了很多真诚瞬间")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.reviewStatus").value("PENDING"))
                 .andExpect(jsonPath("$.publishStatus").value("UNPUBLISHED"))
@@ -148,27 +137,18 @@ class OperationsFlowTests {
                 .andExpect(jsonPath("$.content[0].customerDisplayName").value("林**"))
                 .andExpect(jsonPath("$.content[0].content").value("记录了很多真诚瞬间"));
 
-        String repliedJson = mockMvc.perform(put(
+        mockMvc.perform(put(
                                 "/api/feedback/{feedbackId}/reply", feedbackId.longValue())
-                        .header("Authorization", bearer(creatorToken))
+                        .header("Authorization", bearer(adminToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"content\":\"谢谢你们把信任交给我们\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.reply.reviewStatus").value("PENDING"))
-                .andReturn().getResponse().getContentAsString();
-        Number replyVersion = JsonPath.read(repliedJson, "$.reply.version");
-
-        mockMvc.perform(post("/api/admin/feedback/{feedbackId}/reply/approve", feedbackId.longValue())
-                        .header("Authorization", bearer(adminToken))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"version\":" + replyVersion.longValue() + "}"))
-                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reply.reviewStatus").value("APPROVED"));
 
-        mockMvc.perform(get("/api/public/projects/{projectId}", project.getId()))
+        mockMvc.perform(get("/api/public/feedback"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.feedback[0].id").value(feedbackId.longValue()))
-                .andExpect(jsonPath("$.feedback[0].reply.content").value("谢谢你们把信任交给我们"));
+                .andExpect(jsonPath("$.content[?(@.id == %d)].reply.content".formatted(feedbackId.longValue()))
+                        .value("谢谢你们把信任交给我们"));
 
         mockMvc.perform(put("/api/admin/site/home")
                         .header("Authorization", bearer(adminToken))
@@ -176,17 +156,15 @@ class OperationsFlowTests {
                         .content("""
                                 {
                                   "items": [
-                                    {"targetType":"PROJECT","targetId":%d,"sortOrder":10,"pinned":true},
                                     {"targetType":"FEEDBACK","targetId":%d,"sortOrder":10,"pinned":false}
                                   ]
                                 }
-                                """.formatted(project.getId(), feedbackId.longValue())))
+                                """.formatted(feedbackId.longValue())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.features.length()").value(2));
+                .andExpect(jsonPath("$.features.length()").value(1));
 
         mockMvc.perform(get("/api/public/home"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.projects[0].id").value(project.getId()))
                 .andExpect(jsonPath("$.feedback[0].id").value(feedbackId.longValue()));
 
         Number approvedVersion = JsonPath.read(approvedJson, "$.version");
@@ -206,7 +184,7 @@ class OperationsFlowTests {
                 .andExpect(jsonPath("$.content[?(@.id == %d)]".formatted(feedbackId.longValue())).doesNotExist());
 
         mockMvc.perform(delete("/api/feedback/{feedbackId}", feedbackId.longValue())
-                        .header("Authorization", bearer(creatorToken))
+                        .header("Authorization", bearer(adminToken))
                         .param("version", offlineVersion.toString()))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("FEEDBACK_WITHDRAW_LOCKED"));
@@ -220,7 +198,7 @@ class OperationsFlowTests {
         String createdJson = mockMvc.perform(post("/api/feedback")
                         .header("Authorization", bearer(adminToken))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(feedbackRequest(project.getId(), creator.getId(), null, "管理员代提交的评价")))
+                        .content(feedbackRequest(collection.getId(), creator.getId(), null, "管理员代提交的评价")))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         Number feedbackId = JsonPath.read(createdJson, "$.id");
@@ -229,15 +207,15 @@ class OperationsFlowTests {
         mockMvc.perform(put("/api/feedback/{feedbackId}", feedbackId.longValue())
                         .header("Authorization", bearer(creatorToken))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(feedbackRequest(project.getId(), creator.getId(), version.longValue(), "不应修改")))
+                        .content(feedbackRequest(collection.getId(), creator.getId(), version.longValue(), "不应修改")))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("FEEDBACK_EDIT_ACCESS_DENIED"));
+                .andExpect(jsonPath("$.code").value("FEEDBACK_ACCESS_DENIED"));
 
         mockMvc.perform(delete("/api/feedback/{feedbackId}", feedbackId.longValue())
                         .header("Authorization", bearer(creatorToken))
                         .param("version", version.toString()))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("FEEDBACK_EDIT_ACCESS_DENIED"));
+                .andExpect(jsonPath("$.code").value("FEEDBACK_ACCESS_DENIED"));
 
         mockMvc.perform(delete("/api/feedback/{feedbackId}", feedbackId.longValue())
                         .header("Authorization", bearer(adminToken))
@@ -246,7 +224,7 @@ class OperationsFlowTests {
 
         mockMvc.perform(get("/api/feedback")
                         .header("Authorization", bearer(adminToken))
-                        .param("projectId", project.getId().toString()))
+                        .param("collectionId", collection.getId().toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[?(@.id == %d)]".formatted(feedbackId.longValue())).doesNotExist());
     }
@@ -305,37 +283,6 @@ class OperationsFlowTests {
                 .andExpect(jsonPath("$.followStatus").value("CONTACTED"))
                 .andExpect(jsonPath("$.assignedAdminId").value(admin.getId()));
 
-        mockMvc.perform(put("/api/admin/site/home")
-                        .header("Authorization", bearer(adminToken))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "items": [
-                                    {"targetType":"PROJECT","targetId":%d,"sortOrder":20,"pinned":false}
-                                  ]
-                                }
-                                """.formatted(project.getId())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.features.length()").value(1));
-
-        mockMvc.perform(put("/api/admin/site/home")
-                        .header("Authorization", bearer(adminToken))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "items": [
-                                    {"targetType":"PROJECT","targetId":%d,"sortOrder":20,"pinned":false}
-                                  ]
-                                }
-                                """.formatted(project.getId())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.features.length()").value(1));
-        org.junit.jupiter.api.Assertions.assertEquals(
-                1,
-                homepageFeatureRepository.findAll().stream()
-                        .filter(feature -> project.getId().equals(feature.getTargetId()))
-                        .count()
-        );
     }
 
     @Test
@@ -407,30 +354,17 @@ class OperationsFlowTests {
                 .andExpect(jsonPath("$.candidates[?(@.collectionId == %d)].locationText"
                         .formatted(fixture.collection().getId())).value("杭州"));
 
-        mockMvc.perform(put("/api/admin/site/home")
-                        .header("Authorization", bearer(adminToken))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "items": [
-                                    {"targetType":"COLLECTION","targetId":%d,"sortOrder":10,"pinned":false}
-                                  ]
-                                }
-                                """.formatted(fixture.collection().getId())))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("HOMEPAGE_FEATURE_TARGET_INVALID"));
-
         mockMvc.perform(put("/api/admin/site/home/carousel")
                         .header("Authorization", bearer(adminToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
                                   "items": [
-                                    {"collectionId":%d,"sortOrder":10,"focalX":25.5,"focalY":60},
-                                    {"collectionId":%d,"sortOrder":20,"focalX":50,"focalY":50}
+                                    {"photoId":%d,"sortOrder":10,"focalX":25.5,"focalY":60},
+                                    {"photoId":%d,"sortOrder":20,"focalX":50,"focalY":50}
                                   ]
                                 }
-                                """.formatted(fixture.collection().getId(), fixture.collection().getId())))
+                                """.formatted(fixture.photo().getId(), fixture.photo().getId())))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("HOMEPAGE_CAROUSEL_DUPLICATE"));
 
@@ -440,12 +374,13 @@ class OperationsFlowTests {
                         .content("""
                                 {
                                   "items": [
-                                    {"collectionId":%d,"sortOrder":10,"focalX":25.5,"focalY":60}
+                                    {"photoId":%d,"sortOrder":10,"focalX":25.5,"focalY":60}
                                   ]
                                 }
-                                """.formatted(fixture.collection().getId())))
+                                """.formatted(fixture.photo().getId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].photoId").value(fixture.photo().getId()))
                 .andExpect(jsonPath("$.items[0].collectionId").value(fixture.collection().getId()))
                 .andExpect(jsonPath("$.items[0].focalX").value(25.5))
                 .andExpect(jsonPath("$.items[0].focalY").value(60))
@@ -461,7 +396,7 @@ class OperationsFlowTests {
                 .andExpect(jsonPath("$.carousel[0].eventDate").value("2026-10-18"))
                 .andExpect(jsonPath("$.carousel[0].locationText").value("杭州"))
                 .andExpect(jsonPath("$.carousel[0].originalUrl")
-                        .value("/media/branded/operations-carousel.jpg"))
+                        .value("/api/public/images/photos/" + fixture.photo().getId() + "/original"))
                 .andExpect(jsonPath("$.carousel[0].previewUrl").value("/media/previews/operations-carousel.jpg"));
 
         fixture.collection().setVisibility(ContentVisibility.HIDDEN);
@@ -502,64 +437,49 @@ class OperationsFlowTests {
         org.junit.jupiter.api.Assertions.assertEquals(1, homepageCarouselItemRepository.count());
     }
 
-    private String feedbackRequest(Long projectId, Long creatorId, Long version, String content) {
+    private String feedbackRequest(Long collectionId, Long creatorId, Long version, String content) {
         String versionField = version == null ? "" : "\"version\":" + version + ",";
         return """
                 {
                   %s
-                  "projectId": %d,
+                  "collectionId": %d,
                   "creatorUserId": %d,
                   "customerDisplayName": "林女士",
                   "rating": 5,
                   "content": "%s"
                 }
-                """.formatted(versionField, projectId, creatorId, content);
+                """.formatted(versionField, collectionId, creatorId, content);
     }
 
-    private WeddingProject ensurePublicProject() {
-        return projectRepository.findAllByDeletedFalseOrderByCreatedAtDesc().stream()
-                .filter(item -> "Operations Public Project".equals(item.getTitle()))
+    private WorkCollection ensurePublicCollection() {
+        ContentCategory category = ensureCategory("Operations Public Category", 800);
+        WorkCollection existing = collectionRepository.findAll().stream()
+                .filter(item -> "Operations Public Collection".equals(item.getTitle()))
                 .findFirst()
-                .orElseGet(() -> {
-                    WeddingProject created = new WeddingProject();
-                    created.setProjectCode("OP" + System.nanoTime());
-                    created.setTitle("Operations Public Project");
-                    created.setCoupleDisplayName("T & S");
-                    created.setEventDate(LocalDate.of(2026, 10, 18));
-                    created.setRegionCode("330100");
-                    created.setLocationText("杭州");
-                    created.setDescription("Operations flow test");
-                    created.setVisibility(ContentVisibility.PUBLIC);
-                    created.setReviewStatus(ReviewStatus.APPROVED);
-                    created.setPublishStatus(PublishStatus.PUBLISHED);
-                    created.setPublishedAt(Instant.now());
-                    created.setPublishedBy(admin.getId());
-                    created.setCreatedBy(creator.getId());
-                    created.setUpdatedBy(creator.getId());
-                    WeddingProject saved = projectRepository.saveAndFlush(created);
-
-                    ProjectCreator relation = new ProjectCreator();
-                    relation.setId(new ProjectCreatorId(saved.getId(), creator.getId()));
-                    relation.setAssignedBy(admin.getId());
-                    projectCreatorRepository.saveAndFlush(relation);
-                    return saved;
-                });
+                .orElseGet(WorkCollection::new);
+        existing.setTitle("Operations Public Collection");
+        existing.setDescription("Operations flow test");
+        existing.setEventDate(LocalDate.of(2026, 10, 18));
+        existing.setRegionCode("330100");
+        existing.setLocationText("杭州");
+        existing.setCategoryId(category.getId());
+        existing.setVisibility(ContentVisibility.PUBLIC);
+        existing.setReviewStatus(ReviewStatus.APPROVED);
+        existing.setPublishStatus(PublishStatus.PUBLISHED);
+        existing.setPublishedAt(Instant.now());
+        existing.setPublishedBy(admin.getId());
+        existing.setSortOrder(0);
+        existing.setFeatured(false);
+        existing.setPinned(false);
+        if (existing.getCreatedBy() == null) {
+            existing.setCreatedBy(creator.getId());
+        }
+        existing.setUpdatedBy(creator.getId());
+        return collectionRepository.saveAndFlush(existing);
     }
 
     private CarouselFixture ensureCarouselFixture() {
-        ContentCategory category = categoryRepository.findAllByDeletedFalseOrderBySortOrderAscCreatedAtAsc().stream()
-                .filter(item -> "Operations Carousel Category".equals(item.getName()))
-                .findFirst()
-                .orElseGet(() -> {
-                    ContentCategory created = new ContentCategory();
-                    created.setName("Operations Carousel Category");
-                    created.setDescription("Homepage carousel integration test");
-                    created.setSortOrder(900);
-                    created.setStatus("ACTIVE");
-                    created.setCreatedBy(admin.getId());
-                    created.setUpdatedBy(admin.getId());
-                    return categoryRepository.saveAndFlush(created);
-                });
+        ContentCategory category = ensureCategory("Operations Carousel Category", 900);
 
         WorkCollection collection = collectionRepository.findAll().stream()
                 .filter(item -> "Operations Carousel Collection".equals(item.getTitle()))
@@ -567,8 +487,10 @@ class OperationsFlowTests {
                 .orElseGet(WorkCollection::new);
         collection.setTitle("Operations Carousel Collection");
         collection.setDescription("Homepage carousel integration test collection");
-        collection.setProjectId(project.getId());
         collection.setCategoryId(category.getId());
+        collection.setEventDate(LocalDate.of(2026, 10, 18));
+        collection.setRegionCode("330100");
+        collection.setLocationText("杭州");
         collection.setVisibility(ContentVisibility.PUBLIC);
         collection.setReviewStatus(ReviewStatus.APPROVED);
         collection.setPublishStatus(PublishStatus.PUBLISHED);
@@ -627,6 +549,22 @@ class OperationsFlowTests {
         collection.setUpdatedBy(creator.getId());
         collection = collectionRepository.saveAndFlush(collection);
         return new CarouselFixture(collection, photo);
+    }
+
+    private ContentCategory ensureCategory(String name, int sortOrder) {
+        return categoryRepository.findAllByDeletedFalseOrderBySortOrderAscCreatedAtAsc().stream()
+                .filter(item -> name.equals(item.getName()))
+                .findFirst()
+                .orElseGet(() -> {
+                    ContentCategory created = new ContentCategory();
+                    created.setName(name);
+                    created.setDescription("Operations integration test");
+                    created.setSortOrder(sortOrder);
+                    created.setStatus("ACTIVE");
+                    created.setCreatedBy(admin.getId());
+                    created.setUpdatedBy(admin.getId());
+                    return categoryRepository.saveAndFlush(created);
+                });
     }
 
     private SystemUser ensureAccount(String mobile, String roleCode, String displayName) {

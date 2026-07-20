@@ -163,7 +163,6 @@ public class PublicContentAccessService {
     }
 
     public enum ContentType {
-        PROJECT,
         COLLECTION
     }
 

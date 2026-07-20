@@ -22,18 +22,13 @@ public final class PublicCollectionDtos {
     ) {
     }
 
-    public record ProjectSummary(
-            Long id,
-            String title,
-            LocalDate eventDate,
-            String locationText
-    ) {
-    }
-
     public record CollectionSummary(
             Long id,
             String title,
             String description,
+            LocalDate eventDate,
+            String regionCode,
+            String locationText,
             CategorySummary category,
             List<TagSummary> tags,
             String coverOriginalUrl,
@@ -42,8 +37,7 @@ public final class PublicCollectionDtos {
             Instant publishedAt,
             Boolean featured,
             Boolean pinned,
-            List<CreatorSummary> creators,
-            ProjectSummary project
+            List<CreatorSummary> creators
     ) {
     }
 
