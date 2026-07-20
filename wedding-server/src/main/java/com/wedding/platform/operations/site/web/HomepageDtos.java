@@ -142,7 +142,19 @@ public final class HomepageDtos {
     public record PublicHomepage(
             List<CarouselSlide> carousel,
             List<PublicCollectionDtos.CollectionSummary> collections,
-            List<PublicFeedbackDtos.Feedback> feedback
+            List<PublicFeedbackDtos.Feedback> feedback,
+            List<HeroPhoto> heroPhotos
+    ) {
+    }
+
+    public record HeroPhoto(
+            Long photoId,
+            Long collectionId,
+            String originalUrl,
+            String previewUrl,
+            String thumbnailUrl,
+            Integer width,
+            Integer height
     ) {
     }
 }

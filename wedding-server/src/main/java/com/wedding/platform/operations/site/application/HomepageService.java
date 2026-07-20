@@ -84,7 +84,7 @@ public class HomepageService {
         if (feedback.isEmpty()) {
             feedback = feedbackService.latest(3);
         }
-        return new HomepageDtos.PublicHomepage(carouselSlides(), collections, feedback);
+        return new HomepageDtos.PublicHomepage(carouselSlides(), collections, feedback, heroPhotos());
     }
 
     @Transactional(readOnly = true)
@@ -518,5 +518,29 @@ public class HomepageService {
                     "Only administrators can configure the public homepage");
         }
         return admin;
+    }
+
+    private List<HomepageDtos.HeroPhoto> heroPhotos() {
+        return photoRepository.findAllHeroPhotos().stream()
+                .map(photo -> {
+                    MediaAsset asset = assetRepository.findById(photo.getAssetId())
+                            .filter(a -> !Boolean.TRUE.equals(a.getDeleted()))
+                            .filter(a -> "SUCCESS".equals(a.getProcessStatus()))
+                            .orElse(null);
+                    if (asset == null) {
+                        return null;
+                    }
+                    return new HomepageDtos.HeroPhoto(
+                            photo.getId(),
+                            photo.getCollectionId(),
+                            originalImageUrl(photo.getId()),
+                            publicUrl(asset.getPreviewPath()),
+                            publicUrl(asset.getThumbnailPath()),
+                            asset.getWidth(),
+                            asset.getHeight()
+                    );
+                })
+                .filter(photo -> photo != null)
+                .toList();
     }
 }

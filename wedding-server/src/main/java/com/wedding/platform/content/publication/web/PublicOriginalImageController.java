@@ -10,6 +10,7 @@ import com.wedding.platform.content.publication.application.PublicContentAccessS
 import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
 import com.wedding.platform.content.shared.ReviewStatus;
+import com.wedding.platform.platform.file.BrandedImagePathResolver;
 import com.wedding.platform.platform.web.ApiException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
@@ -49,19 +50,22 @@ public class PublicOriginalImageController {
     private final MediaAssetRepository assetRepository;
     private final WorkCollectionRepository collectionRepository;
     private final PublicContentAccessService contentAccessService;
+    private final BrandedImagePathResolver brandedPathResolver;
 
     public PublicOriginalImageController(
             @Value("${app.storage.root}") String storageRoot,
             CollectionPhotoRepository photoRepository,
             MediaAssetRepository assetRepository,
             WorkCollectionRepository collectionRepository,
-            PublicContentAccessService contentAccessService
+            PublicContentAccessService contentAccessService,
+            BrandedImagePathResolver brandedPathResolver
     ) {
         this.storageRoot = Path.of(storageRoot).toAbsolutePath().normalize();
         this.photoRepository = photoRepository;
         this.assetRepository = assetRepository;
         this.collectionRepository = collectionRepository;
         this.contentAccessService = contentAccessService;
+        this.brandedPathResolver = brandedPathResolver;
     }
 
     @GetMapping("/photos/{photoId}/original")
@@ -83,7 +87,7 @@ public class PublicOriginalImageController {
                 .filter(item -> !Boolean.TRUE.equals(item.getDeleted()))
                 .filter(item -> "SUCCESS".equals(item.getProcessStatus()))
                 .orElseThrow(() -> notFound());
-        Resource resource = originalResource(asset.getOriginalPath());
+        Resource resource = originalResource(brandedPathResolver.relativePath(asset.getOriginalPath()));
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(1, TimeUnit.HOURS).cachePrivate())
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline")

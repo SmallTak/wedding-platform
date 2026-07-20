@@ -53,11 +53,11 @@ const pendingFields = computed(() => fieldItems.value.filter((item) => item.stat
 const selectedFieldCount = computed(() => selectedFieldIds.value.filter(
   (id) => pendingFields.value.some((item) => item.id === id),
 ).length)
-const pendingPhotos = computed(() => detail.value?.photoBatch.photos.filter((photo) => photo.reviewStatus === 'PENDING') || [])
+const pendingPhotos = computed(() => detail.value?.photoBatch?.photos?.filter((photo) => photo.reviewStatus === 'PENDING') || [])
 const selectedPhotoCount = computed(() => selectedPhotoIds.value.filter(
   (id) => pendingPhotos.value.some((photo) => photo.id === id),
 ).length)
-const photosFullyApproved = computed(() => detail.value?.photoBatch.photos.every((photo) => photo.reviewStatus === 'APPROVED'))
+const photosFullyApproved = computed(() => detail.value?.photoBatch?.photos?.every((photo) => photo.reviewStatus === 'APPROVED') ?? false)
 const emptyQueueMessage = computed(() => (
   filters.reviewStatus === DEFAULT_REVIEW_STATUS
     && !filters.keyword.trim()
@@ -477,40 +477,39 @@ function canPublish(item) {
             </label>
           </section>
 
-          <template>
-            <section class="review-section-heading">
-              <div><strong>图片审核</strong><span>已选 {{ selectedPhotoCount }} 张</span></div>
-              <div>
-                <button class="secondary-command" type="button" :disabled="!pendingPhotos.length" @click="togglePendingPhotos">
-                  {{ selectedPhotoCount === pendingPhotos.length && pendingPhotos.length ? '取消全选' : '全选待审图片' }}
-                </button>
-                <button class="secondary-command" type="button" :disabled="!selectedPhotoCount || mutating" @click="reviewSelectedPhotos('REJECT')">
-                  <X :size="16" />驳回图片
-                </button>
-                <button class="primary-command compact-command" type="button" :disabled="!selectedPhotoCount || mutating" @click="reviewSelectedPhotos('APPROVE')">
-                  <Check :size="16" />通过图片
-                </button>
-              </div>
-            </section>
 
-            <section class="review-photo-grid">
-              <label
-                v-for="photo in detail.photoBatch.photos"
-                :key="photo.id"
-                :class="['review-photo-item', `review-${photo.reviewStatus.toLowerCase()}`]"
-              >
-                <input
-                  v-if="photo.reviewStatus === 'PENDING'"
-                  v-model="selectedPhotoIds"
-                  type="checkbox"
-                  :value="photo.id"
-                />
-                <img :src="photo.thumbnailUrl" :alt="photo.originalName" />
-                <span>{{ reviewStatusLabels[photo.reviewStatus] || photo.reviewStatus }}</span>
-                <small v-if="photo.rejectionReason">{{ photo.rejectionReason }}</small>
-              </label>
-            </section>
-          </template>
+          <section v-if="detail.photoBatch" class="review-section-heading">
+            <div><strong>图片审核</strong><span>已选 {{ selectedPhotoCount }} 张</span></div>
+            <div>
+              <button class="secondary-command" type="button" :disabled="!pendingPhotos.length" @click="togglePendingPhotos">
+                {{ selectedPhotoCount === pendingPhotos.length && pendingPhotos.length ? '取消全选' : '全选待审图片' }}
+              </button>
+              <button class="secondary-command" type="button" :disabled="!selectedPhotoCount || mutating" @click="reviewSelectedPhotos('REJECT')">
+                <X :size="16" />驳回图片
+              </button>
+              <button class="primary-command compact-command" type="button" :disabled="!selectedPhotoCount || mutating" @click="reviewSelectedPhotos('APPROVE')">
+                <Check :size="16" />通过图片
+              </button>
+            </div>
+          </section>
+
+          <section v-if="detail.photoBatch?.photos.length" class="review-photo-grid">
+            <label
+              v-for="photo in detail.photoBatch.photos"
+              :key="photo.id"
+              :class="['review-photo-item', `review-${photo.reviewStatus.toLowerCase()}`]"
+            >
+              <input
+                v-if="photo.reviewStatus === 'PENDING'"
+                v-model="selectedPhotoIds"
+                type="checkbox"
+                :value="photo.id"
+              />
+              <img :src="photo.thumbnailUrl" :alt="photo.originalName" />
+              <span>{{ reviewStatusLabels[photo.reviewStatus] || photo.reviewStatus }}</span>
+              <small v-if="photo.rejectionReason">{{ photo.rejectionReason }}</small>
+            </label>
+          </section>
 
           <section v-if="currentHistory?.revisions.length" class="review-history-section">
             <h3>修订记录</h3>

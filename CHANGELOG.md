@@ -27,7 +27,14 @@
 - 补发验证：线上 JAR SHA-256 为 `c9f11a3d3e4d21100500dd7c5be29c15dabaa6e1bf1d4aa3afe71fc519d2a073`，与 iot 构建产物一致；线上官网与源码中已无客户评价自助提交/修改/撤回接口调用字符串。
 - 修复：根据移动端反馈，将官网首页最新作品轮播移动端样式从固定 `520px` 最小高度、`4 / 5` 比例改为 `clamp(320px, 62vw, 460px)` 与 `16 / 10` 比例，避免手机端图片区域过高。
 - 验证：执行 `cd wedding-web && npm run build`，官网生产构建通过。
-- 部署：移动端轮播尺寸修复尚未发布生产，没有后端、数据库、工作台、生产配置或线上状态变化。
+- 部署：将当前源码同步到 iot 的 `/home/apps/wedding-platform/source`，执行 `sudo SKIP_TEST=1 ./deploy/scripts/deploy-local.sh` 完成官网/工作台/JAR 构建、高清品牌图回填、应用与配置备份、服务重启和正式域名验收；应用与配置备份目录为 `/home/apps/wedding-platform/backups/20260720-151816`。
+- 部署：本次没有后端变更或数据库迁移，JAR SHA-256 保持 `c9f11a3d3e4d21100500dd7c5be29c15dabaa6e1bf1d4aa3afe71fc519d2a073`；生产 schema 保持 `V15`。
+- 验证：生产 `wedding-platform.service` 为 `active`，Nginx 配置检查通过；正式首页、工作台、`/api/public/status`、`/api/public/home`、`/api/public/collections`、`/api/public/feedback` 返回 `200`，`/api/public/projects` 和 `/media/originals/not-exist.txt` 返回 `404`。
+- 验证：生产 CSS 已包含 `.work-carousel{aspect-ratio:16/10;min-height:clamp(320px,62vw,460px)}`，官网线上目录与 iot 构建 `dist` 无差异。
+- 修复：初次修复未能解决根本问题——`aspect-ratio` 在窄屏上将轮播撑宽至超出容器（512px vs 320px 父容器），导致图片区域溢出。第二次修复移除桌面端 `.work-carousel` 的 `aspect-ratio: 16/9` 并加 `width: 100%`，移动端改为 `aspect-ratio: auto; min-height: clamp(280px, 75vw, 420px)`，轮播宽高由容器宽度和 min-height 自然决定。
+- 验证：执行 `cd wedding-web && npm run build`，官网生产构建通过；CSS 哈希变为 `index-c0rcZRZq.css`。
+- 部署：第二次修复于 2026-07-20 15:33 发布到 iot，备份目录为 `/home/apps/wedding-platform/backups/20260720-153309`；无后端变更或数据库迁移。
+- 验证：生产 `wedding-platform.service` 为 `active`；正式首页、工作台、`/api/public/status` 返回 `200`；轮播不再溢出父容器。
 
 
 ### 高清品牌图与原始文件私有化

@@ -36,6 +36,19 @@ public interface CollectionPhotoRepository extends JpaRepository<CollectionPhoto
 
     @Query("""
             SELECT photo
+            FROM CollectionPhoto photo
+            JOIN WorkCollection collection ON photo.collectionId = collection.id
+            WHERE photo.deleted = false
+              AND photo.reviewStatus = 'APPROVED'
+              AND collection.deleted = false
+              AND collection.publishStatus = 'PUBLISHED'
+              AND collection.reviewStatus = 'APPROVED'
+            ORDER BY photo.id
+            """)
+    List<CollectionPhoto> findAllHeroPhotos();
+
+    @Query("""
+            SELECT photo
             FROM CollectionPhoto photo, SystemUser user
             WHERE photo.createdBy = user.id
               AND user.accountType = :accountType

@@ -15,7 +15,6 @@ const accessError = ref('')
 const detail = ref(null)
 const activePhotoIndex = ref(null)
 const activePhotoUrl = ref('')
-let activePhotoRequest = 0
 let touchStartX = 0
 let touchStartY = 0
 
@@ -112,23 +111,11 @@ function openPreview(index) {
   const photo = photos.value[index]
   if (!photo) return
   activePhotoIndex.value = index
-  activePhotoUrl.value = photo.previewUrl || photo.thumbnailUrl || photo.originalUrl
+  activePhotoUrl.value = photo.originalUrl || photo.previewUrl || photo.thumbnailUrl
   document.body.style.overflow = 'hidden'
-
-  const request = ++activePhotoRequest
-  if (!photo.originalUrl || photo.originalUrl === activePhotoUrl.value) return
-  const highResolutionImage = new Image()
-  highResolutionImage.decoding = 'async'
-  highResolutionImage.onload = () => {
-    if (request === activePhotoRequest && activePhotoIndex.value === index) {
-      activePhotoUrl.value = photo.originalUrl
-    }
-  }
-  highResolutionImage.src = photo.originalUrl
 }
 
 function closePreview() {
-  activePhotoRequest += 1
   activePhotoIndex.value = null
   activePhotoUrl.value = ''
   document.body.style.overflow = ''
@@ -164,7 +151,7 @@ function closePreview() {
       <section
         class="collection-hero"
         :style="{
-          backgroundImage: `url(${collection.coverPreviewUrl || collection.coverThumbnailUrl || collection.coverOriginalUrl})`,
+          backgroundImage: `url(${collection.coverOriginalUrl || collection.coverPreviewUrl || collection.coverThumbnailUrl})`,
         }"
       >
         <div class="hero-overlay"></div>
@@ -205,9 +192,6 @@ function closePreview() {
         >
           <img
             :src="photo.previewUrl || photo.thumbnailUrl || photo.originalUrl"
-            :srcset="photo.thumbnailUrl && photo.previewUrl
-              ? `${photo.thumbnailUrl} 1x, ${photo.previewUrl} 2x`
-              : undefined"
             :alt="`${collection.title} 图片 ${index + 1}`"
             loading="lazy"
           />

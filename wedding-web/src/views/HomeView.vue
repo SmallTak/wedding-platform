@@ -15,6 +15,15 @@ import heroImage from '../assets/wedding-hero.png'
 import { publicApi } from '../api/public'
 import BrandLogo from '../components/BrandLogo.vue'
 
+function shuffle(array) {
+  const copy = [...array]
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]]
+  }
+  return copy
+}
+
 const menuOpen = ref(false)
 const searchOpen = ref(false)
 const serviceOnline = ref(false)
@@ -24,6 +33,7 @@ const categories = ref([])
 const collections = ref([])
 const feedback = ref([])
 const carousel = ref([])
+const heroPhotos = ref([])
 const currentWorkIndex = ref(0)
 const keyword = ref('')
 const appliedKeyword = ref('')
@@ -40,6 +50,8 @@ const inquiryForm = reactive({
   remark: '',
   website: '',
 })
+
+const shuffledHeroPhotos = computed(() => shuffle(heroPhotos.value))
 
 let workTimer = null
 let workPaused = false
@@ -97,11 +109,13 @@ async function loadHomepage() {
     collections.value = data.collections
     feedback.value = data.feedback
     carousel.value = data.carousel || []
+    heroPhotos.value = data.heroPhotos || []
     startWorkRotation()
   } catch {
     collections.value = []
     feedback.value = []
     carousel.value = []
+    heroPhotos.value = []
     loadError.value = '首页内容暂时无法加载，请稍后再试。'
   } finally {
     loading.value = false
@@ -294,8 +308,18 @@ function formatDate(value) {
     <main>
       <section
         class="hero-section"
-        :style="{ backgroundImage: `url(${heroImage})` }"
+        :style="shuffledHeroPhotos.length ? {} : { backgroundImage: `url(${heroImage})` }"
       >
+        <div v-if="shuffledHeroPhotos.length" class="hero-masonry" aria-hidden="true">
+          <img
+            v-for="photo in shuffledHeroPhotos"
+            :key="photo.photoId"
+            :src="photo.thumbnailUrl"
+            :style="{ aspectRatio: `${photo.width} / ${photo.height}` }"
+            loading="lazy"
+            alt=""
+          />
+        </div>
         <div class="hero-overlay"></div>
         <div class="hero-content">
           <p class="eyebrow">TANGSHI AESTHETICS · 2026</p>
@@ -338,7 +362,7 @@ function formatDate(value) {
             <div
               class="work-image"
               :style="{
-                backgroundImage: `url(${work.coverThumbnailUrl || work.coverPreviewUrl || work.coverOriginalUrl || heroImage})`,
+                backgroundImage: `url(${work.coverOriginalUrl || work.coverPreviewUrl || work.coverThumbnailUrl || heroImage})`,
               }"
             ></div>
             <div class="work-meta">
@@ -370,7 +394,7 @@ function formatDate(value) {
             :aria-hidden="index === currentWorkIndex ? undefined : 'true'"
             :tabindex="index === currentWorkIndex ? undefined : -1"
             :style="{
-              backgroundImage: `url(${slide.previewUrl || slide.thumbnailUrl || slide.originalUrl})`,
+              backgroundImage: `url(${slide.originalUrl || slide.previewUrl || slide.thumbnailUrl})`,
               backgroundPosition: `${Number(slide.focalX ?? 50)}% ${Number(slide.focalY ?? 50)}%`,
             }"
           >
