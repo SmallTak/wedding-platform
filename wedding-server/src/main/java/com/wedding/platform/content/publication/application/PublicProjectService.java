@@ -12,6 +12,7 @@ import com.wedding.platform.content.publication.web.PublicProjectDtos;
 import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
 import com.wedding.platform.operations.feedback.application.PublicFeedbackService;
+import com.wedding.platform.platform.file.BrandedImagePathResolver;
 import com.wedding.platform.platform.web.ApiException;
 import com.wedding.platform.system.account.persistence.entity.ProfessionalRole;
 import com.wedding.platform.system.account.persistence.entity.SystemUser;
@@ -42,6 +43,7 @@ public class PublicProjectService {
     private final PublicCollectionService collectionService;
     private final PublicContentAccessService contentAccessService;
     private final PublicFeedbackService feedbackService;
+    private final BrandedImagePathResolver brandedImagePathResolver;
 
     public PublicProjectService(
             WeddingProjectRepository projectRepository,
@@ -50,7 +52,8 @@ public class PublicProjectService {
             SystemUserRepository userRepository,
             PublicCollectionService collectionService,
             PublicContentAccessService contentAccessService,
-            PublicFeedbackService feedbackService
+            PublicFeedbackService feedbackService,
+            BrandedImagePathResolver brandedImagePathResolver
     ) {
         this.projectRepository = projectRepository;
         this.projectCreatorRepository = projectCreatorRepository;
@@ -59,6 +62,7 @@ public class PublicProjectService {
         this.collectionService = collectionService;
         this.contentAccessService = contentAccessService;
         this.feedbackService = feedbackService;
+        this.brandedImagePathResolver = brandedImagePathResolver;
     }
 
     @Transactional(readOnly = true)
@@ -192,7 +196,7 @@ public class PublicProjectService {
                     .filter(item -> "SUCCESS".equals(item.getProcessStatus()))
                     .orElse(null);
             if (asset != null) {
-                coverOriginalUrl = publicUrl(asset.getOriginalPath());
+                coverOriginalUrl = brandedImagePathResolver.publicUrl(asset.getOriginalPath());
                 coverPreviewUrl = publicUrl(asset.getPreviewPath());
                 coverThumbnailUrl = publicUrl(asset.getThumbnailPath());
             }

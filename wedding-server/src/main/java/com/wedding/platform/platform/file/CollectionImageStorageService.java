@@ -38,9 +38,11 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.HexFormat;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 @Service
 public class CollectionImageStorageService {
@@ -48,6 +50,8 @@ public class CollectionImageStorageService {
     private static final long MAX_IMAGE_BYTES = 30L * 1024 * 1024;
     private static final long MAX_IMAGE_PIXELS = 80_000_000L;
     private static final int MAX_IMAGE_DIMENSION = 20_000;
+    private static final int PREVIEW_WATERMARK_MAX_WIDTH = 420;
+    private static final int BRANDED_WATERMARK_MAX_WIDTH = 1200;
     private static final Set<String> JPEG_FORMATS = Set.of("jpeg", "jpg");
 
     private final Path storageRoot;
@@ -56,7 +60,9 @@ public class CollectionImageStorageService {
     private final String thumbnailsDirectory;
     private final int previewMaxWidth;
     private final int thumbnailMaxWidth;
+    private final int brandedMaxWidth;
     private final BufferedImage watermarkImage;
+    private final BrandedImagePathResolver brandedImagePathResolver;
 
     public CollectionImageStorageService(
             @Value("${app.storage.root}") String storageRoot,
@@ -65,8 +71,10 @@ public class CollectionImageStorageService {
             @Value("${app.storage.thumbnails:thumbnails}") String thumbnailsDirectory,
             @Value("${app.storage.images.preview-max-width:1920}") int previewMaxWidth,
             @Value("${app.storage.images.thumbnail-max-width:480}") int thumbnailMaxWidth,
+            @Value("${app.storage.images.branded-max-width:2560}") int brandedMaxWidth,
             @Value("${app.storage.images.watermark-resource:classpath:/brand/watermark.png}")
-            String watermarkResource
+            String watermarkResource,
+            BrandedImagePathResolver brandedImagePathResolver
     ) {
         this.storageRoot = Path.of(storageRoot).toAbsolutePath().normalize();
         this.originalsDirectory = validateDirectory(originalsDirectory);
@@ -74,7 +82,9 @@ public class CollectionImageStorageService {
         this.thumbnailsDirectory = validateDirectory(thumbnailsDirectory);
         this.previewMaxWidth = requirePositive(previewMaxWidth, "Preview max width");
         this.thumbnailMaxWidth = requirePositive(thumbnailMaxWidth, "Thumbnail max width");
+        this.brandedMaxWidth = requirePositive(brandedMaxWidth, "Branded max width");
         this.watermarkImage = loadWatermark(watermarkResource);
+        this.brandedImagePathResolver = brandedImagePathResolver;
     }
 
     public StoredImage store(MultipartFile file) {
@@ -83,10 +93,12 @@ public class CollectionImageStorageService {
         String identifier = UUID.randomUUID().toString();
         Path temporaryDirectory = storageRoot.resolve(".tmp").normalize();
         Path uploadTemporary = temporaryDirectory.resolve(identifier + ".upload");
+        Path brandedTemporary = temporaryDirectory.resolve(identifier + ".branded.jpg");
         Path previewTemporary = temporaryDirectory.resolve(identifier + ".preview.jpg");
         Path thumbnailTemporary = temporaryDirectory.resolve(identifier + ".thumbnail.jpg");
 
         Path originalTarget = null;
+        Path brandedTarget = null;
         Path previewTarget = null;
         Path thumbnailTarget = null;
         try {
@@ -99,23 +111,30 @@ public class CollectionImageStorageService {
             String originalExtension = "image/png".equals(decoded.mimeType()) ? ".png" : ".jpg";
             String storageName = identifier + originalExtension;
             String originalPath = originalsDirectory + "/" + datePath + "/" + storageName;
+            String brandedPath = brandedImagePathResolver.relativePath(originalPath);
             String previewPath = previewsDirectory + "/" + datePath + "/" + identifier + ".jpg";
             String thumbnailPath = thumbnailsDirectory + "/" + datePath + "/" + identifier + ".jpg";
 
             originalTarget = resolveStoragePath(originalPath);
+            brandedTarget = resolveStoragePath(brandedPath);
             previewTarget = resolveStoragePath(previewPath);
             thumbnailTarget = resolveStoragePath(thumbnailPath);
 
             BufferedImage preview = resize(decoded.image(), previewMaxWidth);
-            applyWatermark(preview);
+            applyWatermark(preview, PREVIEW_WATERMARK_MAX_WIDTH);
             writeJpeg(preview, previewTemporary, 0.88f);
             BufferedImage thumbnail = resize(decoded.image(), thumbnailMaxWidth);
             writeJpeg(thumbnail, thumbnailTemporary, 0.82f);
+            BufferedImage branded = resize(decoded.image(), brandedMaxWidth);
+            applyWatermark(branded, BRANDED_WATERMARK_MAX_WIDTH);
+            writeJpeg(branded, brandedTemporary, 0.90f);
 
             Files.createDirectories(originalTarget.getParent());
+            Files.createDirectories(brandedTarget.getParent());
             Files.createDirectories(previewTarget.getParent());
             Files.createDirectories(thumbnailTarget.getParent());
             move(uploadTemporary, originalTarget);
+            move(brandedTemporary, brandedTarget);
             move(previewTemporary, previewTarget);
             move(thumbnailTemporary, thumbnailTarget);
 
@@ -127,17 +146,18 @@ public class CollectionImageStorageService {
                     decoded.width(),
                     decoded.height(),
                     originalPath,
+                    brandedPath,
                     previewPath,
                     thumbnailPath,
                     checksum
             );
         } catch (ApiException exception) {
-            cleanup(uploadTemporary, previewTemporary, thumbnailTemporary);
-            cleanup(originalTarget, previewTarget, thumbnailTarget);
+            cleanup(uploadTemporary, brandedTemporary, previewTemporary, thumbnailTemporary);
+            cleanup(originalTarget, brandedTarget, previewTarget, thumbnailTarget);
             throw exception;
         } catch (IOException exception) {
-            cleanup(uploadTemporary, previewTemporary, thumbnailTemporary);
-            cleanup(originalTarget, previewTarget, thumbnailTarget);
+            cleanup(uploadTemporary, brandedTemporary, previewTemporary, thumbnailTemporary);
+            cleanup(originalTarget, brandedTarget, previewTarget, thumbnailTarget);
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "IMAGE_PROCESS_FAILED",
                     "The image could not be stored or processed");
         }
@@ -149,9 +169,57 @@ public class CollectionImageStorageService {
         }
         cleanup(
                 resolveStoragePath(image.originalPath()),
+                resolveStoragePath(image.brandedPath()),
                 resolveStoragePath(image.previewPath()),
                 resolveStoragePath(image.thumbnailPath())
         );
+    }
+
+    public BrandedBackfillResult backfillBrandedImages(boolean overwrite) {
+        Path originalsRoot = resolveStoragePath(originalsDirectory);
+        if (!Files.exists(originalsRoot)) {
+            return new BrandedBackfillResult(0, 0);
+        }
+        List<Path> sources;
+        try (Stream<Path> paths = Files.walk(originalsRoot)) {
+            sources = paths.filter(Files::isRegularFile)
+                    .filter(this::isSupportedOriginal)
+                    .sorted()
+                    .toList();
+        } catch (IOException exception) {
+            throw new IllegalStateException("Original image directory could not be scanned", exception);
+        }
+
+        int generated = 0;
+        int skipped = 0;
+        Path temporaryDirectory = storageRoot.resolve(".tmp").normalize();
+        for (Path source : sources) {
+            String originalPath = storageRoot.relativize(source).toString().replace('\\', '/');
+            Path target = resolveStoragePath(brandedImagePathResolver.relativePath(originalPath));
+            if (!overwrite && Files.exists(target)) {
+                skipped++;
+                continue;
+            }
+
+            Path temporary = temporaryDirectory.resolve(UUID.randomUUID() + ".branded-backfill.jpg");
+            try {
+                Files.createDirectories(temporaryDirectory);
+                DecodedImage decoded = decode(source);
+                BufferedImage branded = resize(decoded.image(), brandedMaxWidth);
+                applyWatermark(branded, BRANDED_WATERMARK_MAX_WIDTH);
+                writeJpeg(branded, temporary, 0.90f);
+                Files.createDirectories(target.getParent());
+                move(temporary, target);
+                generated++;
+            } catch (RuntimeException | IOException exception) {
+                cleanup(temporary);
+                throw new IllegalStateException(
+                        "Branded image could not be generated for " + originalPath,
+                        exception
+                );
+            }
+        }
+        return new BrandedBackfillResult(generated, skipped);
     }
 
     private String copyUpload(MultipartFile file, Path target) throws IOException {
@@ -306,7 +374,7 @@ public class CollectionImageStorageService {
         return rgb;
     }
 
-    private void applyWatermark(BufferedImage image) {
+    private void applyWatermark(BufferedImage image, int maxWidth) {
         if (watermarkImage == null) {
             return;
         }
@@ -317,7 +385,7 @@ public class CollectionImageStorageService {
             graphics.setRenderingHint(RenderingHints.KEY_RENDERING,
                     RenderingHints.VALUE_RENDER_QUALITY);
 
-            int targetWidth = Math.max(1, Math.min(420, (int) Math.round(image.getWidth() * 0.32d)));
+            int targetWidth = Math.max(1, Math.min(maxWidth, (int) Math.round(image.getWidth() * 0.32d)));
             int targetHeight = Math.max(1, (int) Math.round(
                     (double) watermarkImage.getHeight() * targetWidth / watermarkImage.getWidth()
             ));
@@ -390,7 +458,12 @@ public class CollectionImageStorageService {
 
     private void move(Path source, Path target) throws IOException {
         try {
-            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
+            Files.move(
+                    source,
+                    target,
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING
+            );
         } catch (AtomicMoveNotSupportedException exception) {
             Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
         }
@@ -482,6 +555,11 @@ public class CollectionImageStorageService {
         }
     }
 
+    private boolean isSupportedOriginal(Path path) {
+        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        return name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png");
+    }
+
     private record DecodedImage(BufferedImage image, String mimeType, int width, int height) {
     }
 
@@ -493,9 +571,13 @@ public class CollectionImageStorageService {
             int width,
             int height,
             String originalPath,
+            String brandedPath,
             String previewPath,
             String thumbnailPath,
             String checksum
     ) {
+    }
+
+    public record BrandedBackfillResult(int generated, int skipped) {
     }
 }

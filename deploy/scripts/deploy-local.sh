@@ -57,6 +57,22 @@ if [[ "$SKIP_BUILD" != "1" ]]; then
   "$ROOT_DIR/deploy/scripts/build-all.sh"
 fi
 
+printf '[wedding-platform] backfilling web-sized branded images\n'
+(
+  cd "$ROOT_DIR/wedding-server"
+  if [[ -x /opt/java/jdk17/bin/java ]]; then
+    JAVA_HOME=/opt/java/jdk17
+    PATH="$JAVA_HOME/bin:$PATH"
+    export JAVA_HOME PATH
+  fi
+  ./gradlew backfillBrandedImages -PstorageRoot="$APP_ROOT/storage"
+)
+if [[ -d "$APP_ROOT/storage/branded" ]]; then
+  chown -R "$APP_USER:$APP_GROUP" "$APP_ROOT/storage/branded"
+  find "$APP_ROOT/storage/branded" -type d -exec chmod 0755 {} +
+  find "$APP_ROOT/storage/branded" -type f -exec chmod 0644 {} +
+fi
+
 JAR_FILE="$(find "$ROOT_DIR/wedding-server/build/libs" -maxdepth 1 -type f \
   -name '*.jar' ! -name '*-plain.jar' | head -n 1)"
 [[ -n "$JAR_FILE" && -f "$JAR_FILE" ]] || {
@@ -104,13 +120,17 @@ if [[ "$DEPLOY_NGINX" == "1" && -f "$NGINX_CONF" ]]; then
 fi
 
 rollback_required=1
-original_probe_file=""
+branded_probe_file=""
+raw_probe_file=""
 rollback() {
   local status="$?"
   trap - ERR
   set +e
-  if [[ -n "$original_probe_file" ]]; then
-    rm -f "$original_probe_file"
+  if [[ -n "$branded_probe_file" ]]; then
+    rm -f "$branded_probe_file"
+  fi
+  if [[ -n "$raw_probe_file" ]]; then
+    rm -f "$raw_probe_file"
   fi
   if [[ "$rollback_required" == "1" ]]; then
     printf '[wedding-platform] deployment failed; restoring backup %s\n' "$BACKUP_DIR" >&2
@@ -211,19 +231,29 @@ printf '[wedding-platform] validating public routes\n'
 curl -fsS "$PUBLIC_BASE_URL/" >/dev/null
 curl -fsS "$PUBLIC_BASE_URL/console/" >/dev/null
 curl -fsS "$PUBLIC_BASE_URL/api/public/status" >/dev/null
-original_probe_name="deployment-check-$TIMESTAMP.txt"
-original_probe_body="wedding-platform-original-media-$TIMESTAMP"
-original_probe_file="$APP_ROOT/storage/originals/$original_probe_name"
-install -d -o "$APP_USER" -g "$APP_GROUP" -m 0755 "$APP_ROOT/storage/originals"
-printf '%s' "$original_probe_body" > "$original_probe_file"
-chown "$APP_USER:$APP_GROUP" "$original_probe_file"
-chmod 0644 "$original_probe_file"
-[[ "$(curl -fsS "$PUBLIC_BASE_URL/media/originals/$original_probe_name")" == "$original_probe_body" ]] || {
-  printf '[wedding-platform] original media route validation failed\n' >&2
+media_probe_name="deployment-check-$TIMESTAMP.txt"
+media_probe_body="wedding-platform-branded-media-$TIMESTAMP"
+branded_probe_file="$APP_ROOT/storage/branded/$media_probe_name"
+raw_probe_file="$APP_ROOT/storage/originals/$media_probe_name"
+install -d -o "$APP_USER" -g "$APP_GROUP" -m 0755 \
+  "$APP_ROOT/storage/branded" "$APP_ROOT/storage/originals"
+printf '%s' "$media_probe_body" > "$branded_probe_file"
+printf '%s' "$media_probe_body" > "$raw_probe_file"
+chown "$APP_USER:$APP_GROUP" "$branded_probe_file" "$raw_probe_file"
+chmod 0644 "$branded_probe_file" "$raw_probe_file"
+[[ "$(curl -fsS "$PUBLIC_BASE_URL/media/branded/$media_probe_name")" == "$media_probe_body" ]] || {
+  printf '[wedding-platform] branded media route validation failed\n' >&2
   false
 }
-rm -f "$original_probe_file"
-original_probe_file=""
+raw_status="$(curl -sS -o /dev/null -w '%{http_code}' \
+  "$PUBLIC_BASE_URL/media/originals/$media_probe_name")"
+[[ "$raw_status" == "404" ]] || {
+  printf '[wedding-platform] raw original media route must return 404, got %s\n' "$raw_status" >&2
+  false
+}
+rm -f "$branded_probe_file" "$raw_probe_file"
+branded_probe_file=""
+raw_probe_file=""
 
 rollback_required=0
 trap - ERR

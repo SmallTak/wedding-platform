@@ -24,6 +24,7 @@ import com.wedding.platform.operations.site.persistence.repository.HomepageCarou
 import com.wedding.platform.operations.site.persistence.repository.HomepageFeatureRepository;
 import com.wedding.platform.operations.site.web.HomepageDtos;
 import com.wedding.platform.platform.audit.AuditLogService;
+import com.wedding.platform.platform.file.BrandedImagePathResolver;
 import com.wedding.platform.platform.web.ApiException;
 import com.wedding.platform.system.account.persistence.entity.SystemUser;
 import com.wedding.platform.system.account.persistence.repository.SystemUserRepository;
@@ -60,6 +61,7 @@ public class HomepageService {
     private final PublicFeedbackService feedbackService;
     private final SystemUserRepository userRepository;
     private final AuditLogService auditLogService;
+    private final BrandedImagePathResolver brandedImagePathResolver;
 
     public HomepageService(
             HomepageFeatureRepository featureRepository,
@@ -72,7 +74,8 @@ public class HomepageService {
             PublicCollectionService collectionService,
             PublicFeedbackService feedbackService,
             SystemUserRepository userRepository,
-            AuditLogService auditLogService
+            AuditLogService auditLogService,
+            BrandedImagePathResolver brandedImagePathResolver
     ) {
         this.featureRepository = featureRepository;
         this.carouselRepository = carouselRepository;
@@ -85,6 +88,7 @@ public class HomepageService {
         this.feedbackService = feedbackService;
         this.userRepository = userRepository;
         this.auditLogService = auditLogService;
+        this.brandedImagePathResolver = brandedImagePathResolver;
     }
 
     @Transactional(readOnly = true)
@@ -328,7 +332,7 @@ public class HomepageService {
                 collection.getDescription(),
                 project == null ? null : project.getEventDate(),
                 project == null ? null : project.getLocationText(),
-                publicUrl(asset.getOriginalPath()),
+                brandedImagePathResolver.publicUrl(asset.getOriginalPath()),
                 publicUrl(asset.getPreviewPath()),
                 publicUrl(asset.getThumbnailPath()),
                 asset.getWidth(),
@@ -353,7 +357,7 @@ public class HomepageService {
                 collection == null ? null : collection.getDescription(),
                 project == null ? null : project.getEventDate(),
                 project == null ? null : project.getLocationText(),
-                asset == null ? null : publicUrlOrNull(asset.getOriginalPath()),
+                asset == null ? null : brandedImagePathResolver.publicUrl(asset.getOriginalPath()),
                 asset == null ? null : publicUrlOrNull(asset.getPreviewPath()),
                 asset == null ? null : publicUrlOrNull(asset.getThumbnailPath()),
                 asset == null ? null : asset.getWidth(),

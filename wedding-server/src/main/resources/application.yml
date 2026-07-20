@@ -44,9 +44,11 @@ app:
     root: ${STORAGE_ROOT:./data/storage}
     avatars: avatars
     originals: originals
+    branded: branded
     previews: previews
     thumbnails: thumbnails
     images:
       preview-max-width: ${IMAGE_PREVIEW_MAX_WIDTH:1920}
       thumbnail-max-width: ${IMAGE_THUMBNAIL_MAX_WIDTH:480}
+      branded-max-width: ${IMAGE_BRANDED_MAX_WIDTH:2560}
       watermark-resource: ${IMAGE_WATERMARK_RESOURCE:classpath:/brand/watermark.png}

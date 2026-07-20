@@ -11,7 +11,9 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -35,7 +37,9 @@ class CollectionImageStorageServiceTests {
                 "thumbnails",
                 1920,
                 480,
-                ""
+                2560,
+                "",
+                new BrandedImagePathResolver("originals", "branded")
         );
         Color[][] expectedCorners = {
                 null,
@@ -71,7 +75,7 @@ class CollectionImageStorageServiceTests {
     }
 
     @Test
-    void brandWatermarkIsAppliedToPreviewButNotThumbnail() throws Exception {
+    void brandWatermarkIsAppliedToWebSizedAndPreviewImagesButNotRawOriginalOrThumbnail() throws Exception {
         CollectionImageStorageService service = new CollectionImageStorageService(
                 storageRoot.toString(),
                 "originals",
@@ -79,24 +83,70 @@ class CollectionImageStorageServiceTests {
                 "thumbnails",
                 1200,
                 480,
-                "classpath:/brand/watermark.png"
+                1400,
+                "classpath:/brand/watermark.png",
+                new BrandedImagePathResolver("originals", "branded")
         );
         Color background = new Color(150, 150, 150);
+        byte[] source = solidPng(1800, 1200, background);
         MockMultipartFile upload = new MockMultipartFile(
                 "files",
                 "watermark-source.png",
                 "image/png",
-                solidPng(1200, 800, background)
+                source
         );
 
         CollectionImageStorageService.StoredImage stored = service.store(upload);
+        BufferedImage branded = ImageIO.read(storageRoot.resolve(stored.brandedPath()).toFile());
         BufferedImage preview = ImageIO.read(storageRoot.resolve(stored.previewPath()).toFile());
         BufferedImage thumbnail = ImageIO.read(storageRoot.resolve(stored.thumbnailPath()).toFile());
 
+        assertEquals(1400, branded.getWidth());
+        assertEquals(933, branded.getHeight());
+        assertEquals(1200, preview.getWidth());
+        assertEquals(800, preview.getHeight());
+        assertTrue(countChangedPixels(branded, background, 20) > 500,
+                "web-sized branded image should contain the watermark");
         assertTrue(countChangedPixels(preview, background, 20) > 500,
                 "preview should contain the branded watermark");
         assertTrue(countChangedPixels(thumbnail, background, 20) < 20,
                 "thumbnail should remain free of the watermark");
+        assertTrue(Arrays.equals(source, Files.readAllBytes(storageRoot.resolve(stored.originalPath()))),
+                "raw original should remain byte-for-byte unchanged");
+    }
+
+    @Test
+    void existingOriginalsCanBeBackfilledWithoutOverwritingGeneratedFiles() throws Exception {
+        BrandedImagePathResolver resolver = new BrandedImagePathResolver("originals", "branded");
+        CollectionImageStorageService service = new CollectionImageStorageService(
+                storageRoot.toString(),
+                "originals",
+                "previews",
+                "thumbnails",
+                1200,
+                480,
+                800,
+                "classpath:/brand/watermark.png",
+                resolver
+        );
+        Path original = storageRoot.resolve("originals/2026/07/existing.png");
+        Files.createDirectories(original.getParent());
+        Files.write(original, solidPng(1000, 700, new Color(130, 130, 130)));
+
+        CollectionImageStorageService.BrandedBackfillResult first = service.backfillBrandedImages(false);
+        Path branded = storageRoot.resolve(resolver.relativePath("originals/2026/07/existing.png"));
+        long firstModified = Files.getLastModifiedTime(branded).toMillis();
+        CollectionImageStorageService.BrandedBackfillResult second = service.backfillBrandedImages(false);
+
+        assertEquals(1, first.generated());
+        assertEquals(0, first.skipped());
+        assertEquals(0, second.generated());
+        assertEquals(1, second.skipped());
+        assertEquals(firstModified, Files.getLastModifiedTime(branded).toMillis());
+        BufferedImage generated = ImageIO.read(branded.toFile());
+        assertEquals(800, generated.getWidth());
+        assertEquals(560, generated.getHeight());
+        assertTrue(countChangedPixels(generated, new Color(130, 130, 130), 20) > 500);
     }
 
     private byte[] jpegWithExifOrientation(int orientation) throws Exception {

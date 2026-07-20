@@ -21,6 +21,7 @@ import com.wedding.platform.content.publication.web.PublicAccessDtos;
 import com.wedding.platform.content.shared.ContentVisibility;
 import com.wedding.platform.content.shared.PublishStatus;
 import com.wedding.platform.content.shared.ReviewStatus;
+import com.wedding.platform.platform.file.BrandedImagePathResolver;
 import com.wedding.platform.platform.web.ApiException;
 import com.wedding.platform.system.account.persistence.entity.ProfessionalRole;
 import com.wedding.platform.system.account.persistence.entity.SystemUser;
@@ -54,6 +55,7 @@ public class PublicCollectionService {
     private final WeddingProjectRepository projectRepository;
     private final SystemUserRepository userRepository;
     private final PublicContentAccessService contentAccessService;
+    private final BrandedImagePathResolver brandedImagePathResolver;
 
     public PublicCollectionService(
             WorkCollectionRepository collectionRepository,
@@ -65,7 +67,8 @@ public class PublicCollectionService {
             MediaAssetRepository assetRepository,
             WeddingProjectRepository projectRepository,
             SystemUserRepository userRepository,
-            PublicContentAccessService contentAccessService
+            PublicContentAccessService contentAccessService,
+            BrandedImagePathResolver brandedImagePathResolver
     ) {
         this.collectionRepository = collectionRepository;
         this.categoryRepository = categoryRepository;
@@ -77,6 +80,7 @@ public class PublicCollectionService {
         this.projectRepository = projectRepository;
         this.userRepository = userRepository;
         this.contentAccessService = contentAccessService;
+        this.brandedImagePathResolver = brandedImagePathResolver;
     }
 
     @Transactional(readOnly = true)
@@ -177,7 +181,7 @@ public class PublicCollectionService {
                             photo.getId(),
                             asset.getWidth(),
                             asset.getHeight(),
-                            publicUrl(asset.getOriginalPath()),
+                            brandedImagePathResolver.publicUrl(asset.getOriginalPath()),
                             publicUrl(asset.getPreviewPath()),
                             publicUrl(asset.getThumbnailPath()),
                             photo.getSortOrder()
@@ -285,7 +289,7 @@ public class PublicCollectionService {
             if (cover != null) {
                 MediaAsset asset = assetRepository.findById(cover.getAssetId()).orElse(null);
                 if (asset != null) {
-                    coverOriginalUrl = publicUrl(asset.getOriginalPath());
+                    coverOriginalUrl = brandedImagePathResolver.publicUrl(asset.getOriginalPath());
                     coverPreviewUrl = publicUrl(asset.getPreviewPath());
                     coverThumbnailUrl = publicUrl(asset.getThumbnailPath());
                 }

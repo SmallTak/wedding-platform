@@ -3,6 +3,36 @@
 本文件按时间倒序记录项目实现、验证与部署结果。每次代码、数据库、配置或线上状态变化时，
 必须与 `docs/开发交接.md` 在同一提交更新。禁止记录数据库密码、JWT 密钥、证书私钥或长期账号密码。
 
+## 2026-07-20
+
+### 高清品牌图与原始文件私有化
+
+- 新增高清品牌图派生路径解析，公开响应继续保留 `coverOriginalUrl` 和 `originalUrl` 字段名，
+  但字段值改为 `/media/branded/...jpg`，不再指向原始文件。
+- 新上传图片同步生成最长边 2560 px 的带“糖诗·美学”水印高清品牌图；原始 JPEG/PNG 字节、
+  缩略图和既有预览图保持不变。
+- 新增 `backfillBrandedImages` Gradle 任务，发布脚本会在替换应用前为历史原图补生成缺失的
+  高清品牌图，默认跳过已存在文件。
+- Nginx 待发布配置改为公开 `/media/branded/`、`/media/previews/` 和 `/media/thumbnails/`，
+  `/media/originals/` 固定返回 `404`；发布脚本同时验证高清品牌图可访问和原图不可访问。
+- 官网列表、首页推荐、项目详情、作品集封面和首页轮播优先使用缩略图或预览图；作品集灯箱先
+  显示预览图，高清品牌图加载成功后替换。
+- 同步更新阶段二图片、阶段三官网、阶段四首页轮播、产品方案、品牌要求、部署说明和开发交接；
+  `.gitignore` 新增 `tmp/`，避免提交本地生成提示词。
+- 验证：执行
+  `cd wedding-server && JAVA_HOME=/opt/java/jdk17 PATH=/opt/java/jdk17/bin:$PATH ./gradlew test`，
+  后端完整测试共 29 个通过。
+- 验证：直接执行两个前端 `PATH=/opt/node22/bin:$PATH npm run build` 因本机 glibc 版本过低失败；
+  随后使用 `node:22.18.0-bookworm-slim` Docker 分别执行 `npm ci && npm run build`，官网和
+  工作台 `/console/` 生产构建通过。官网主入口 JS 为 `65.33 kB`、CSS 为 `36.34 kB`；
+  工作台主入口 JS 为 `52.72 kB`、CSS 为 `94.33 kB`。
+- 验证：执行
+  `cd wedding-server && JAVA_HOME=/opt/java/jdk17 PATH=/opt/java/jdk17/bin:$PATH ./gradlew backfillBrandedImages -PstorageRoot=/tmp/wedding-branded-backfill-check-empty`，
+  任务入口执行通过，输出 `generated=0 skipped=0`。
+- 验证：`bash -n deploy/scripts/deploy-local.sh` 和 `git diff --check` 通过。
+- 部署：本次未执行生产部署，没有数据库迁移；生产仍运行 2026-07-19 原图公开版本，
+  生产 schema 保持 `V14`。
+
 ## 2026-07-19
 
 ### 官网业务图片原图展示与工作台按需拆分生产部署

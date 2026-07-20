@@ -47,3 +47,13 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
+tasks.register('backfillBrandedImages', JavaExec) {
+	dependsOn classes
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'com.wedding.platform.platform.file.BrandedImageBackfillTool'
+	args project.findProperty('storageRoot') ?: './data/storage'
+	if (project.hasProperty('overwriteBranded')) {
+		args '--overwrite'
+	}
+}

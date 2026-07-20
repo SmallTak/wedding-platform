@@ -338,9 +338,9 @@ class CollectionReviewFlowTests {
                 .andExpect(jsonPath("$.photos.length()").value(1))
                 .andExpect(jsonPath("$.photos[0].id").value(coverPhotoId.longValue()))
                 .andExpect(jsonPath("$.collection.coverOriginalUrl")
-                        .value(org.hamcrest.Matchers.startsWith("/media/originals/")))
+                        .value(org.hamcrest.Matchers.startsWith("/media/branded/")))
                 .andExpect(jsonPath("$.photos[0].originalUrl")
-                        .value(org.hamcrest.Matchers.startsWith("/media/originals/")))
+                        .value(org.hamcrest.Matchers.startsWith("/media/branded/")))
                 .andExpect(jsonPath("$.photos[0].previewUrl")
                         .value(org.hamcrest.Matchers.startsWith("/media/previews/")))
                 .andExpect(jsonPath("$.photos[0].originalPath").doesNotExist());

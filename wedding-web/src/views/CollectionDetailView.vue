@@ -14,6 +14,8 @@ const accessLoading = ref(false)
 const accessError = ref('')
 const detail = ref(null)
 const activePhotoIndex = ref(null)
+const activePhotoUrl = ref('')
+let activePhotoRequest = 0
 
 const collection = computed(() => detail.value?.collection)
 const photos = computed(() => detail.value?.photos || [])
@@ -69,12 +71,28 @@ async function unlockCollection(password) {
 }
 
 function openPreview(index) {
+  const photo = photos.value[index]
+  if (!photo) return
   activePhotoIndex.value = index
+  activePhotoUrl.value = photo.previewUrl || photo.thumbnailUrl || photo.originalUrl
   document.body.style.overflow = 'hidden'
+
+  const request = ++activePhotoRequest
+  if (!photo.originalUrl || photo.originalUrl === activePhotoUrl.value) return
+  const highResolutionImage = new Image()
+  highResolutionImage.decoding = 'async'
+  highResolutionImage.onload = () => {
+    if (request === activePhotoRequest && activePhotoIndex.value === index) {
+      activePhotoUrl.value = photo.originalUrl
+    }
+  }
+  highResolutionImage.src = photo.originalUrl
 }
 
 function closePreview() {
+  activePhotoRequest += 1
   activePhotoIndex.value = null
+  activePhotoUrl.value = ''
   document.body.style.overflow = ''
 }
 </script>
@@ -107,7 +125,9 @@ function closePreview() {
     <main v-else-if="collection">
       <section
         class="collection-hero"
-        :style="{ backgroundImage: `url(${collection.coverOriginalUrl})` }"
+        :style="{
+          backgroundImage: `url(${collection.coverPreviewUrl || collection.coverThumbnailUrl || collection.coverOriginalUrl})`,
+        }"
       >
         <div class="hero-overlay"></div>
         <div class="collection-hero-content">
@@ -149,12 +169,19 @@ function closePreview() {
           :style="{ aspectRatio: `${photo.width} / ${photo.height}` }"
           @click="openPreview(index)"
         >
-          <img :src="photo.originalUrl" :alt="`${collection.title} 图片 ${index + 1}`" loading="lazy" />
+          <img
+            :src="photo.previewUrl || photo.thumbnailUrl || photo.originalUrl"
+            :srcset="photo.thumbnailUrl && photo.previewUrl
+              ? `${photo.thumbnailUrl} 1x, ${photo.previewUrl} 2x`
+              : undefined"
+            :alt="`${collection.title} 图片 ${index + 1}`"
+            loading="lazy"
+          />
         </button>
       </section>
 
       <section class="collection-end">
-        <p>{{ photos.length }} 张公开原图</p>
+        <p>{{ photos.length }} 张公开作品</p>
         <RouterLink class="contact-link" to="/">浏览更多作品</RouterLink>
       </section>
     </main>
@@ -163,7 +190,7 @@ function closePreview() {
       <button type="button" aria-label="关闭预览" title="关闭预览" @click="closePreview">
         <X :size="22" />
       </button>
-      <img :src="activePhoto.originalUrl" :alt="collection.title" />
+      <img :src="activePhotoUrl" :alt="collection.title" />
       <span>{{ activePhotoIndex + 1 }} / {{ photos.length }}</span>
     </div>
   </div>
