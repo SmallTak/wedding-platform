@@ -72,7 +72,7 @@ async function changePassword() {
     </section>
 
     <section v-if="auth.setupRequired" class="customer-context-notice warning">
-      管理员已重置您的密码。继续使用项目关联和评价功能前，请先设置只有您本人知道的新密码。
+      管理员已重置您的密码。继续使用客户中心前，请先设置只有您本人知道的新密码。
     </section>
 
     <p v-if="errorMessage" class="customer-form-message error" role="alert">{{ errorMessage }}</p>

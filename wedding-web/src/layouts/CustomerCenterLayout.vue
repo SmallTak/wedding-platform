@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Bell,
   CircleUserRound,
-    House,
+  House,
   LogOut,
   Menu,
   MessageSquareText,
@@ -52,7 +52,7 @@ function logout() {
         <BrandLogo />
       </RouterLink>
       <div class="customer-header-title">
-        <span>客户中心</span>
+        <span>TANGSHI CLIENT</span>
         <strong>{{ pageTitle }}</strong>
       </div>
       <div class="customer-header-actions">

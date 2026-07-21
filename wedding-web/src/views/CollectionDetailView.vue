@@ -29,6 +29,10 @@ const creatorLabel = computed(() => collection.value?.creators
     return roles ? `${creator.displayName} · ${roles}` : creator.displayName
   })
   .join(' / '))
+const detailMeta = computed(() => [
+  collection.value?.eventDate,
+  collection.value?.locationText,
+].filter(Boolean).join(' · '))
 
 onMounted(loadCollection)
 onUnmounted(() => {
@@ -156,14 +160,17 @@ function closePreview() {
       >
         <div class="hero-overlay"></div>
         <div class="collection-hero-content">
-          <p>{{ collection.category?.name || 'Wedding collection' }}</p>
+          <p>{{ collection.category?.name || 'Wedding collection' }} · 糖诗影像档案</p>
           <h1>{{ collection.title }}</h1>
+          <span v-if="detailMeta">{{ detailMeta }}</span>
         </div>
+        <span class="collection-hero-index">ARCHIVE / {{ String(collection.id).padStart(3, '0') }}</span>
       </section>
 
       <section class="collection-intro">
         <div class="collection-description">
-          <p class="section-kicker">The story</p>
+          <p class="section-kicker">About this story</p>
+          <h2>关于这一卷</h2>
           <p>{{ collection.description || '一组关于仪式、相聚与真实情绪的婚礼影像。' }}</p>
         </div>
         <dl>
@@ -182,6 +189,12 @@ function closePreview() {
         </dl>
       </section>
 
+      <div class="collection-gallery-heading">
+        <p class="section-kicker">Selected frames</p>
+        <h2>影像选帧</h2>
+        <span>{{ String(photos.length).padStart(2, '0') }} 幅</span>
+      </div>
+
       <section class="collection-gallery" aria-label="作品图片">
         <button
           v-for="(photo, index) in photos"
@@ -199,8 +212,8 @@ function closePreview() {
       </section>
 
       <section class="collection-end">
-        <p>{{ photos.length }} 张公开作品</p>
-        <RouterLink class="contact-link" to="/">浏览更多作品</RouterLink>
+        <p>此卷至此，余韵未尽。</p>
+        <RouterLink class="contact-link" to="/">回到作品首页 <ArrowLeft :size="16" /></RouterLink>
       </section>
     </main>
 

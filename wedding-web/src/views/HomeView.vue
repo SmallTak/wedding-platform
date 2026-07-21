@@ -1,10 +1,13 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
+  ArrowDown,
   ArrowUpRight,
   ChevronLeft,
   ChevronRight,
   Menu,
+  Pause,
+  Play,
   Search,
   Send,
   Star,
@@ -15,15 +18,6 @@ import heroImage from '../assets/wedding-hero.png'
 import { publicApi } from '../api/public'
 import BrandLogo from '../components/BrandLogo.vue'
 
-function shuffle(array) {
-  const copy = [...array]
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]]
-  }
-  return copy
-}
-
 const menuOpen = ref(false)
 const searchOpen = ref(false)
 const serviceOnline = ref(false)
@@ -33,7 +27,6 @@ const categories = ref([])
 const collections = ref([])
 const feedback = ref([])
 const carousel = ref([])
-const heroPhotos = ref([])
 const currentWorkIndex = ref(0)
 const keyword = ref('')
 const appliedKeyword = ref('')
@@ -51,19 +44,20 @@ const inquiryForm = reactive({
   website: '',
 })
 
-const shuffledHeroPhotos = computed(() => shuffle(heroPhotos.value))
-
 let workTimer = null
-let workPaused = false
+let touchStartX = 0
+let touchStartY = 0
+const workPaused = ref(false)
 const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-const workSlides = computed(() => carousel.value)
+const workSlides = computed(() => carousel.value.slice(0, 5))
+const activeSlide = computed(() => workSlides.value[currentWorkIndex.value] || null)
 const isFilteringWorks = computed(() =>
   Boolean(appliedKeyword.value) || selectedCategoryId.value !== null,
 )
 const resultTitle = computed(() => {
   if (appliedKeyword.value) return `“${appliedKeyword.value}”的作品`
   const category = categories.value.find((item) => item.id === selectedCategoryId.value)
-  return category ? category.name : '最新作品'
+  return category ? category.name : '近作选章'
 })
 
 onMounted(async () => {
@@ -72,14 +66,10 @@ onMounted(async () => {
 onBeforeUnmount(stopWorkRotation)
 
 watch(
-  [() => workSlides.value.length, isFilteringWorks],
-  ([slideCount, filtering]) => {
+  () => workSlides.value.length,
+  (slideCount) => {
     if (currentWorkIndex.value >= slideCount) currentWorkIndex.value = 0
-    if (filtering) {
-      stopWorkRotation()
-    } else {
-      startWorkRotation()
-    }
+    startWorkRotation()
   },
 )
 
@@ -106,16 +96,14 @@ async function loadHomepage() {
   loadError.value = ''
   try {
     const { data } = await publicApi.home()
-    collections.value = data.collections
-    feedback.value = data.feedback
+    collections.value = data.collections || []
+    feedback.value = data.feedback || []
     carousel.value = data.carousel || []
-    heroPhotos.value = data.heroPhotos || []
     startWorkRotation()
   } catch {
     collections.value = []
     feedback.value = []
     carousel.value = []
-    heroPhotos.value = []
     loadError.value = '首页内容暂时无法加载，请稍后再试。'
   } finally {
     loading.value = false
@@ -124,10 +112,10 @@ async function loadHomepage() {
 
 function startWorkRotation() {
   stopWorkRotation()
-  if (workPaused || reduceMotion || isFilteringWorks.value || workSlides.value.length < 2) return
+  if (workPaused.value || reduceMotion || workSlides.value.length < 2) return
   workTimer = window.setInterval(() => {
     currentWorkIndex.value = (currentWorkIndex.value + 1) % workSlides.value.length
-  }, 6500)
+  }, 7600)
 }
 
 function stopWorkRotation() {
@@ -138,18 +126,41 @@ function stopWorkRotation() {
 }
 
 function pauseWorkRotation() {
-  workPaused = true
+  workPaused.value = true
   stopWorkRotation()
 }
 
 function resumeWorkRotation() {
-  workPaused = false
+  workPaused.value = false
   startWorkRotation()
 }
 
+function toggleWorkRotation() {
+  if (workPaused.value) resumeWorkRotation()
+  else pauseWorkRotation()
+}
+
 function showWorkSlide(index) {
+  if (!workSlides.value.length) return
   currentWorkIndex.value = (index + workSlides.value.length) % workSlides.value.length
   startWorkRotation()
+}
+
+function handleTouchStart(event) {
+  const touch = event.changedTouches?.[0]
+  if (!touch) return
+  touchStartX = touch.clientX
+  touchStartY = touch.clientY
+}
+
+function handleTouchEnd(event) {
+  const touch = event.changedTouches?.[0]
+  if (!touch) return
+  const dx = touch.clientX - touchStartX
+  const dy = touch.clientY - touchStartY
+  if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    showWorkSlide(currentWorkIndex.value + (dx < 0 ? 1 : -1))
+  }
 }
 
 async function loadCollections() {
@@ -163,7 +174,6 @@ async function loadCollections() {
       categoryId: selectedCategoryId.value || undefined,
     })
     collections.value = data.content
-    feedback.value = []
   } catch {
     collections.value = []
     loadError.value = '作品暂时无法加载，请稍后再试。'
@@ -189,11 +199,8 @@ async function selectCategory(categoryId) {
   keyword.value = ''
   appliedKeyword.value = ''
   selectedCategoryId.value = selectedCategoryId.value === categoryId ? null : categoryId
-  if (selectedCategoryId.value === null) {
-    await loadHomepage()
-  } else {
-    await loadCollections()
-  }
+  if (selectedCategoryId.value === null) await loadHomepage()
+  else await loadCollections()
   await nextTick()
   document.querySelector('#works')?.scrollIntoView({ behavior: 'smooth' })
 }
@@ -253,13 +260,14 @@ function formatDate(value) {
 </script>
 
 <template>
-  <div class="site-shell">
+  <div class="site-shell home-page">
     <header class="site-header">
       <RouterLink class="brand" to="/" aria-label="糖诗·美学首页">
         <BrandLogo />
       </RouterLink>
 
       <nav :class="['site-nav', { 'is-open': menuOpen }]" aria-label="主导航">
+        <a href="#story" @click="menuOpen = false">关于糖诗</a>
         <a href="#works" @click="menuOpen = false">婚礼作品</a>
         <a href="#categories" @click="menuOpen = false">作品分类</a>
         <RouterLink :to="{ name: 'reviews' }" @click="menuOpen = false">客户评价</RouterLink>
@@ -267,12 +275,7 @@ function formatDate(value) {
       </nav>
 
       <div class="header-actions">
-        <RouterLink
-          class="icon-button"
-          :to="{ name: 'customer-feedback' }"
-          aria-label="客户中心"
-          title="客户中心"
-        >
+        <RouterLink class="icon-button" :to="{ name: 'customer-feedback' }" aria-label="客户中心" title="客户中心">
           <UserRound :size="18" />
         </RouterLink>
         <button
@@ -292,13 +295,14 @@ function formatDate(value) {
           :aria-expanded="menuOpen"
           @click="menuOpen = !menuOpen"
         >
-          <Menu :size="19" />
+          <X v-if="menuOpen" :size="19" />
+          <Menu v-else :size="19" />
         </button>
       </div>
     </header>
 
     <form v-if="searchOpen" class="search-bar" role="search" @submit.prevent="searchCollections">
-      <label for="site-search">搜索作品</label>
+      <label for="site-search">在作品中寻找</label>
       <div class="search-input-row">
         <input id="site-search" v-model="keyword" type="search" placeholder="婚礼、地点或风格" autofocus />
         <button type="submit" aria-label="提交搜索" title="搜索"><Search :size="18" /></button>
@@ -308,63 +312,118 @@ function formatDate(value) {
     <main>
       <section
         class="hero-section"
-        :style="shuffledHeroPhotos.length ? {} : { backgroundImage: `url(${heroImage})` }"
+        aria-label="精选婚礼作品"
+        @mouseenter="pauseWorkRotation"
+        @mouseleave="resumeWorkRotation"
+        @focusin="pauseWorkRotation"
+        @focusout="resumeWorkRotation"
+        @touchstart.passive="handleTouchStart"
+        @touchend.passive="handleTouchEnd"
       >
-        <div v-if="shuffledHeroPhotos.length" class="hero-masonry" aria-hidden="true">
-          <img
-            v-for="photo in shuffledHeroPhotos"
-            :key="photo.photoId"
-            :src="photo.thumbnailUrl"
-            :style="{ aspectRatio: `${photo.width} / ${photo.height}` }"
-            loading="lazy"
-            alt=""
-          />
+        <div class="hero-media" aria-hidden="true">
+          <div
+            v-if="!workSlides.length"
+            class="hero-slide active"
+            :style="{ backgroundImage: `url(${heroImage})` }"
+          ></div>
+          <div
+            v-for="(slide, index) in workSlides"
+            :key="slide.photoId"
+            :class="['hero-slide', { active: index === currentWorkIndex }]"
+            :style="{
+              backgroundImage: `url(${slide.originalUrl || slide.previewUrl || slide.thumbnailUrl || heroImage})`,
+              backgroundPosition: `${Number(slide.focalX ?? 50)}% ${Number(slide.focalY ?? 50)}%`,
+            }"
+          ></div>
         </div>
         <div class="hero-overlay"></div>
+
         <div class="hero-content">
-          <p class="eyebrow">TANGSHI AESTHETICS · 2026</p>
-          <h1>糖诗·美学</h1>
-          <p class="hero-copy">收藏仪式发生时，那些无法重来的光线、表情与拥抱。</p>
-          <a class="hero-link" href="#works">
-            浏览公开作品
+          <p class="eyebrow">TANGSHI AESTHETICS · HANGZHOU</p>
+          <h1>一场婚礼，<br />一卷光阴。</h1>
+          <p class="hero-copy">以东方的克制与温度，收藏仪式发生时无法重来的光线、表情与拥抱。</p>
+          <RouterLink
+            v-if="activeSlide"
+            class="hero-link"
+            :to="{ name: 'collection-detail', params: { collectionId: activeSlide.collectionId } }"
+          >
+            查看此卷作品
             <ArrowUpRight :size="17" />
+          </RouterLink>
+          <a v-else class="hero-link" href="#works">
+            浏览公开作品
+            <ArrowDown :size="17" />
           </a>
+        </div>
+
+        <div v-if="workSlides.length > 1" class="hero-controls" aria-label="首屏轮播控制">
+          <span>{{ String(currentWorkIndex + 1).padStart(2, '0') }}</span>
+          <div class="hero-progress" aria-hidden="true">
+            <i :style="{ width: `${((currentWorkIndex + 1) / workSlides.length) * 100}%` }"></i>
+          </div>
+          <span>{{ String(workSlides.length).padStart(2, '0') }}</span>
+          <button type="button" aria-label="上一张" title="上一张" @click="showWorkSlide(currentWorkIndex - 1)">
+            <ChevronLeft :size="19" />
+          </button>
+          <button
+            type="button"
+            :aria-label="workPaused ? '继续轮播' : '暂停轮播'"
+            :title="workPaused ? '继续轮播' : '暂停轮播'"
+            @click="toggleWorkRotation"
+          >
+            <Play v-if="workPaused" :size="16" />
+            <Pause v-else :size="16" />
+          </button>
+          <button type="button" aria-label="下一张" title="下一张" @click="showWorkSlide(currentWorkIndex + 1)">
+            <ChevronRight :size="19" />
+          </button>
+        </div>
+
+        <p v-if="activeSlide" class="hero-caption">
+          <span>{{ activeSlide.collectionTitle }}</span>
+          <span>{{ [activeSlide.locationText, formatDate(activeSlide.eventDate)].filter(Boolean).join(' · ') }}</span>
+        </p>
+      </section>
+
+      <section id="story" class="brand-story-section">
+        <div class="brand-story-mark">糖诗</div>
+        <div class="brand-story-heading">
+          <p class="section-kicker">Our point of view</p>
+          <h2>不追逐喧哗，<br />只让真情自然发生。</h2>
+        </div>
+        <div class="brand-story-copy">
+          <p>我们相信，好的婚礼影像不是一场表演，而是替时间留下证词。</p>
+          <p>从晨起梳妆到夜色散场，糖诗以克制的观察、细腻的光影和对人的理解，写下每一场婚礼独有的气韵。</p>
         </div>
       </section>
 
-      <section
-        v-if="loading || loadError || isFilteringWorks || workSlides.length"
-        id="works"
-        class="content-section featured-section"
-      >
+      <section id="works" class="content-section featured-section">
         <div class="section-heading">
           <div>
-            <p class="section-kicker">Published work</p>
+            <p class="section-kicker">Selected stories</p>
             <h2>{{ resultTitle }}</h2>
           </div>
-          <button
-            v-if="isFilteringWorks"
-            class="text-button"
-            type="button"
-            @click="clearFilters"
-          >查看全部</button>
+          <button v-if="isFilteringWorks" class="text-button" type="button" @click="clearFilters">回到近作</button>
+          <p v-else>从相遇、礼成，到夜色深处。<br />每一卷，都是独一无二的叙事。</p>
         </div>
 
-        <div v-if="loading" class="public-loading">正在加载作品...</div>
+        <div v-if="loading" class="public-loading">正在展开作品...</div>
         <p v-else-if="loadError" class="public-error">{{ loadError }}</p>
-        <div v-else-if="isFilteringWorks && collections.length" class="work-grid">
+        <div v-else-if="collections.length" class="work-grid">
           <RouterLink
-            v-for="work in collections"
+            v-for="(work, index) in collections"
             :key="work.id"
             :to="{ name: 'collection-detail', params: { collectionId: work.id } }"
             class="work-item"
           >
-            <div
-              class="work-image"
-              :style="{
-                backgroundImage: `url(${work.coverOriginalUrl || work.coverPreviewUrl || work.coverThumbnailUrl || heroImage})`,
-              }"
-            ></div>
+            <div class="work-number">{{ String(index + 1).padStart(2, '0') }}</div>
+            <div class="work-image-wrap">
+              <img
+                :src="work.coverOriginalUrl || work.coverPreviewUrl || work.coverThumbnailUrl || heroImage"
+                :alt="work.title"
+                loading="lazy"
+              />
+            </div>
             <div class="work-meta">
               <div>
                 <p>{{ work.category?.name || '婚礼作品' }}</p>
@@ -374,65 +433,18 @@ function formatDate(value) {
             </div>
           </RouterLink>
         </div>
-        <div v-else-if="isFilteringWorks" class="public-empty">
+        <div v-else class="public-empty">
           <h3>暂无已发布作品</h3>
           <p>新的婚礼故事将在审核并发布后出现在这里。</p>
-        </div>
-        <div
-          v-else-if="workSlides.length"
-          class="work-carousel"
-          @mouseenter="pauseWorkRotation"
-          @mouseleave="resumeWorkRotation"
-          @focusin="pauseWorkRotation"
-          @focusout="resumeWorkRotation"
-        >
-          <RouterLink
-            v-for="(slide, index) in workSlides"
-            :key="slide.photoId"
-            :to="{ name: 'collection-detail', params: { collectionId: slide.collectionId } }"
-            :class="['work-carousel-slide', { active: index === currentWorkIndex }]"
-            :aria-hidden="index === currentWorkIndex ? undefined : 'true'"
-            :tabindex="index === currentWorkIndex ? undefined : -1"
-            :style="{
-              backgroundImage: `url(${slide.originalUrl || slide.previewUrl || slide.thumbnailUrl})`,
-              backgroundPosition: `${Number(slide.focalX ?? 50)}% ${Number(slide.focalY ?? 50)}%`,
-            }"
-          >
-            <div class="work-carousel-overlay"></div>
-            <div class="work-carousel-copy">
-              <p v-if="slide.locationText || slide.eventDate">
-                <span v-if="slide.locationText">{{ slide.locationText }}</span>
-                <span v-if="slide.eventDate">{{ formatDate(slide.eventDate) }}</span>
-              </p>
-              <h3>{{ slide.collectionTitle }}</h3>
-              <div v-if="slide.description">{{ slide.description }}</div>
-              <strong>查看完整作品 <ArrowUpRight :size="17" /></strong>
-            </div>
-          </RouterLink>
-          <div v-if="workSlides.length > 1" class="work-carousel-controls" aria-label="作品轮播控制">
-            <button type="button" aria-label="上一个作品" title="上一个作品" @click="showWorkSlide(currentWorkIndex - 1)">
-              <ChevronLeft :size="19" />
-            </button>
-            <div class="work-carousel-dots">
-              <button
-                v-for="(slide, index) in workSlides"
-                :key="slide.photoId"
-                type="button"
-                :class="{ active: index === currentWorkIndex }"
-                :aria-label="`显示第 ${index + 1} 个作品`"
-                :aria-current="index === currentWorkIndex ? 'true' : undefined"
-                @click="showWorkSlide(index)"
-              ></button>
-            </div>
-            <button type="button" aria-label="下一个作品" title="下一个作品" @click="showWorkSlide(currentWorkIndex + 1)">
-              <ChevronRight :size="19" />
-            </button>
-          </div>
         </div>
       </section>
 
       <section id="categories" class="category-band">
-        <p class="section-kicker">Collections</p>
+        <div class="category-intro">
+          <p class="section-kicker">Browse the archive</p>
+          <h2>循风格，<br />寻一场心仪婚礼。</h2>
+          <p>从仪式气质进入作品档案，找到与你们相近的表达。</p>
+        </div>
         <div class="category-list">
           <button
             v-for="(category, index) in categories"
@@ -442,7 +454,7 @@ function formatDate(value) {
             @click="selectCategory(category.id)"
           >
             <span>{{ String(index + 1).padStart(2, '0') }}</span>
-            {{ category.name }}
+            <strong>{{ category.name }}</strong>
             <ArrowUpRight :size="18" />
           </button>
           <p v-if="!categories.length" class="category-empty">分类正在整理中</p>
@@ -453,17 +465,18 @@ function formatDate(value) {
         <div class="section-heading">
           <div>
             <p class="section-kicker">Client voices</p>
-            <h2>他们记住的时刻</h2>
+            <h2>他们记住的，<br />不只是照片。</h2>
           </div>
           <RouterLink class="text-link" :to="{ name: 'reviews' }">
-            查看全部评价
+            读更多来信
             <ArrowUpRight :size="17" />
           </RouterLink>
         </div>
         <div class="public-feedback-list">
-          <blockquote v-for="item in feedback" :key="item.id" class="public-feedback-item">
+          <blockquote v-for="(item, index) in feedback" :key="item.id" class="public-feedback-item">
+            <span class="feedback-index">{{ String(index + 1).padStart(2, '0') }}</span>
             <div class="public-feedback-rating" :aria-label="`${item.rating} 星`">
-              <Star v-for="index in 5" :key="index" :size="15" :class="{ filled: index <= item.rating }" />
+              <Star v-for="rating in 5" :key="rating" :size="14" :class="{ filled: rating <= item.rating }" />
             </div>
             <p>“{{ item.content }}”</p>
             <footer>
@@ -479,36 +492,37 @@ function formatDate(value) {
       </section>
 
       <section id="contact" class="contact-section">
-        <div>
-          <p class="section-kicker">Enquiry</p>
-          <h2>告诉我们你的婚期</h2>
-          <p class="contact-copy">留下联系方式与服务需求，团队会根据婚期和地区尽快回复。</p>
+        <div class="contact-heading">
+          <p class="section-kicker">Begin your story</p>
+          <h2>愿我们在恰好的<br />光阴里相见。</h2>
+          <p class="contact-copy">留下婚期、地点与期待。团队会在确认档期后，与你认真聊聊这一天。</p>
+          <span class="contact-seal">预约</span>
         </div>
         <form class="inquiry-form" @submit.prevent="submitInquiry">
           <div class="inquiry-form-grid">
             <label>
-              姓名
-              <input v-model="inquiryForm.name" maxlength="100" autocomplete="name" required />
+              <span>你的称呼</span>
+              <input v-model="inquiryForm.name" maxlength="100" autocomplete="name" placeholder="如何称呼你" required />
             </label>
             <label>
-              联系方式
+              <span>联系方式</span>
               <input v-model="inquiryForm.contact" minlength="5" maxlength="120" autocomplete="tel" placeholder="手机或微信" required />
             </label>
             <label>
-              婚期
+              <span>婚期</span>
               <input v-model="inquiryForm.weddingDate" type="date" />
             </label>
             <label>
-              地区
+              <span>地点</span>
               <input v-model="inquiryForm.region" maxlength="200" placeholder="城市或场地" />
             </label>
             <label class="inquiry-wide-field">
-              服务需求
+              <span>服务期待</span>
               <input v-model="inquiryForm.serviceNeeds" maxlength="1000" placeholder="婚礼摄影、跟拍、妆造或策划" required />
             </label>
             <label class="inquiry-wide-field">
-              补充说明
-              <textarea v-model="inquiryForm.remark" rows="4" maxlength="2000"></textarea>
+              <span>想对我们说</span>
+              <textarea v-model="inquiryForm.remark" rows="4" maxlength="2000" placeholder="关于你们、婚礼，或喜欢的影像气质"></textarea>
             </label>
             <label class="inquiry-honeypot" aria-hidden="true">
               网站
@@ -516,18 +530,18 @@ function formatDate(value) {
             </label>
           </div>
           <p v-if="inquiryError" class="inquiry-message error">{{ inquiryError }}</p>
-          <p v-else-if="inquiryReceipt" class="inquiry-message success">
-            已收到咨询，编号 {{ inquiryReceipt }}
-          </p>
+          <p v-else-if="inquiryReceipt" class="inquiry-message success">已收到咨询，编号 {{ inquiryReceipt }}</p>
           <button type="submit" :disabled="inquirySubmitting">
             <Send :size="17" />
-            {{ inquirySubmitting ? '正在提交' : '提交咨询' }}
+            {{ inquirySubmitting ? '正在送出' : '送出预约' }}
           </button>
         </form>
       </section>
     </main>
 
     <footer class="site-footer">
+      <BrandLogo />
+      <p>东方婚礼影像与美学记录</p>
       <span>© 2026 糖诗·美学</span>
       <span class="service-status">
         <i :class="{ online: serviceOnline }"></i>

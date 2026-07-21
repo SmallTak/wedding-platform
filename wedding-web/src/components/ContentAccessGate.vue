@@ -25,7 +25,8 @@ function submit() {
   <section class="access-gate">
     <KeyRound :size="30" stroke-width="1.5" />
     <p class="section-kicker">Private archive</p>
-    <h1>请输入访问密码</h1>
+    <h1>这是一卷私藏影像</h1>
+    <p class="access-gate-copy">请输入摄影团队提供的访问密码，继续查看完整作品。</p>
     <form @submit.prevent="submit">
       <label for="content-access-password">访问密码</label>
       <div>
@@ -39,7 +40,7 @@ function submit() {
           autofocus
         />
         <button type="submit" :disabled="loading">
-          {{ loading ? '验证中...' : '进入' }}
+          {{ loading ? '验证中...' : '启封' }}
         </button>
       </div>
       <p v-if="errorMessage" class="access-error">{{ errorMessage }}</p>

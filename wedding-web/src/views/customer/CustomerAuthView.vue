@@ -12,7 +12,7 @@ import {
   UserRound,
 } from '@lucide/vue'
 import BrandLogo from '../../components/BrandLogo.vue'
-import heroImage from '../../assets/wedding-hero.png'
+import heroImage from '../../assets/wedding-hero.jpg'
 import { useCustomerAuthStore } from '../../stores/customerAuth'
 
 const route = useRoute()
@@ -82,8 +82,8 @@ async function submit() {
         <BrandLogo light />
       </RouterLink>
       <div class="customer-auth-caption">
-        <span>婚礼影像客户中心</span>
-        <strong>查看项目关联状态，留下属于这场婚礼的真实感受。</strong>
+        <span>糖诗影像 · 客户中心</span>
+        <strong>妥善收好每一次联系，也认真回应婚礼之后的每一份感受。</strong>
       </div>
     </section>
 

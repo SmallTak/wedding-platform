@@ -171,7 +171,7 @@ function formatDate(value) {
       <div class="customer-section-heading customer-notification-toolbar">
         <div>
           <h2>消息记录</h2>
-          <p>项目关联和评价审核结果会在这里保留。</p>
+          <p>与你相关的评价审核结果会在这里妥善保留。</p>
         </div>
         <label class="customer-checkbox-control">
           <input v-model="unreadOnly" type="checkbox" />

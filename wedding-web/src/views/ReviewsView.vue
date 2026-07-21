@@ -50,14 +50,18 @@ function changePage(nextPage) {
 
     <main>
       <section class="reviews-heading">
-        <p class="section-kicker">Client voices</p>
-        <h1>被认真记住的感受</h1>
+        <div>
+          <p class="section-kicker">Letters from our couples</p>
+          <h1>被认真记住的，<br />还有那些感受。</h1>
+        </div>
+        <p>婚礼散场以后，照片替时间留下形状。<br />这些话，则替那一天留下温度。</p>
       </section>
       <section class="reviews-content">
         <div v-if="loading" class="public-loading">正在加载客户评价...</div>
         <p v-else-if="errorMessage" class="public-error">{{ errorMessage }}</p>
         <div v-else-if="feedback.length" class="public-feedback-list reviews-list">
-          <blockquote v-for="item in feedback" :key="item.id" class="public-feedback-item">
+          <blockquote v-for="(item, index) in feedback" :key="item.id" class="public-feedback-item">
+            <span class="feedback-index">{{ String(index + 1 + page * 12).padStart(2, '0') }}</span>
             <div class="public-feedback-rating" :aria-label="`${item.rating} 星`">
               <Star v-for="index in 5" :key="index" :size="15" :class="{ filled: index <= item.rating }" />
             </div>
