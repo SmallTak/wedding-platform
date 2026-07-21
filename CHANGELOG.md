@@ -15,7 +15,15 @@
 - 新增测试覆盖未登录上传返回 `401 UNAUTHORIZED`、multipart 配置为 `50 MB / 300 MB`，
   以及 50 MB 以上文件返回 `IMAGE_TOO_LARGE`。
 - 验证：图片上传定向测试与工作台生产构建通过。
-- 部署：待执行。
+- 部署：2026-07-21 将源码同步到 iot 后，按要求跳过重复测试并执行生产构建与发布；官网、
+  工作台、后端 JAR、systemd 和 Nginx 配置完成备份、替换及服务重启，备份目录为
+  `/home/apps/wedding-platform/backups/20260721-171827`。本次没有 Flyway 迁移或数据库数据
+  变更，生产 schema 保持 `V15`。
+- 验证：`wedding-platform.service` 为 `active`，Nginx 配置检查通过，正式首页、工作台和
+  `/api/public/status` 返回 `200`；未登录调用图片上传接口返回 `401 UNAUTHORIZED`。
+- 验证：线上 JAR SHA-256 为
+  `df8650686275078688886cef38aef06620e48dea73b462176d690ee9e80f959c`，官网、工作台和后端
+  线上文件与 iot 本次构建产物一致。
 
 ### 官网与客户中心“东方宋韵与留白”视觉重设计
 

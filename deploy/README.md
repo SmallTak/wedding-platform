@@ -124,7 +124,8 @@ curl -I https://photo.shop-hz.top/
 curl https://photo.shop-hz.top/api/public/status
 ```
 
-截至 2026-07-19，生产服务、HTTPS、主域名解析、登录接口、审核中心、密码访问、公开婚礼项目、
-客户中心、数据统计、统一站内消息和官网分级图片展示均已部署，生产数据库保持 Flyway `V14`。
+截至 2026-07-21，生产服务、HTTPS、主域名解析、登录接口、审核中心、密码访问、客户中心、
+数据统计、统一站内消息、官网分级图片展示和单张 50 MB 作品图片上传均已部署，生产数据库保持
+Flyway `V15`。作品图片上传接口继续要求有效 JWT、`/content/collections` 权限和作品集参与关系。
 首个生产管理员已经创建，
 `BOOTSTRAP_ADMIN_ENABLED` 保持为 `false`，环境文件中不保留临时密码。
