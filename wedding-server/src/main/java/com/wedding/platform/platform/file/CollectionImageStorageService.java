@@ -47,7 +47,7 @@ import java.util.stream.Stream;
 @Service
 public class CollectionImageStorageService {
 
-    private static final long MAX_IMAGE_BYTES = 30L * 1024 * 1024;
+    private static final long MAX_IMAGE_BYTES = 50L * 1024 * 1024;
     private static final long MAX_IMAGE_PIXELS = 80_000_000L;
     private static final int MAX_IMAGE_DIMENSION = 20_000;
     private static final int PREVIEW_WATERMARK_MAX_WIDTH = 420;
@@ -233,7 +233,7 @@ public class CollectionImageStorageService {
                 copied += read;
                 if (copied > MAX_IMAGE_BYTES) {
                     throw new ApiException(HttpStatus.BAD_REQUEST, "IMAGE_TOO_LARGE",
-                            "Each image must not exceed 30 MB");
+                            "Each image must not exceed 50 MB");
                 }
                 output.write(buffer, 0, read);
             }
@@ -475,7 +475,7 @@ public class CollectionImageStorageService {
         }
         if (file.getSize() > MAX_IMAGE_BYTES) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "IMAGE_TOO_LARGE",
-                    "Each image must not exceed 30 MB");
+                    "Each image must not exceed 50 MB");
         }
     }
 

@@ -13,7 +13,7 @@ const errorMessages = {
   COLLECTION_CREATOR_INVALID: '选择的共同创作者不存在、已停用或账号无效',
   IMAGE_BATCH_INVALID: '请选择 1 至 50 张有效图片',
   IMAGE_EMPTY: '图片文件为空',
-  IMAGE_TOO_LARGE: '单张图片不能超过 30 MB',
+  IMAGE_TOO_LARGE: '单张图片不能超过 50 MB',
   IMAGE_FORMAT_UNSUPPORTED: '仅支持真实格式为 JPEG 或 PNG 的图片',
   IMAGE_DIMENSIONS_INVALID: '图片尺寸超出处理范围',
   PHOTO_ORDER_INVALID: '图片顺序已变化，请重新加载后排序',

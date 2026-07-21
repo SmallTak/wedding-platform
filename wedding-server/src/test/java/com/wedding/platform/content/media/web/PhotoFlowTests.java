@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.servlet.autoconfigure.MultipartProperties;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
@@ -26,6 +27,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.util.unit.DataSize;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
@@ -85,6 +87,9 @@ class PhotoFlowTests {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private MultipartProperties multipartProperties;
 
     private SystemUser admin;
     private SystemUser owner;
@@ -235,6 +240,33 @@ class PhotoFlowTests {
 
         org.junit.jupiter.api.Assertions.assertTrue(
                 photoRepository.findAllByCollectionIdAndDeletedFalseOrderBySortOrderAscIdAsc(collection.id()).isEmpty());
+    }
+
+    @Test
+    void photoUploadRequiresAuthenticatedUser() throws Exception {
+        MockMultipartFile image = new MockMultipartFile(
+                "files",
+                "unauthenticated.jpg",
+                MediaType.IMAGE_JPEG_VALUE,
+                image("jpeg", 320, 240, Color.GRAY)
+        );
+
+        mockMvc.perform(multipart("/api/collections/{collectionId}/photos", 1L)
+                        .file(image))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void multipartConfigurationAllowsFiftyMegabyteImages() {
+        org.junit.jupiter.api.Assertions.assertEquals(
+                DataSize.ofMegabytes(50),
+                multipartProperties.getMaxFileSize()
+        );
+        org.junit.jupiter.api.Assertions.assertEquals(
+                DataSize.ofMegabytes(300),
+                multipartProperties.getMaxRequestSize()
+        );
     }
 
     @Test

@@ -111,8 +111,8 @@ async function handleFileSelection(event) {
     ElMessage.warning('单次最多上传 50 张图片')
     return
   }
-  if (files.some((file) => file.size > 30 * 1024 * 1024)) {
-    ElMessage.warning('单张图片不能超过 30 MB')
+  if (files.some((file) => file.size > 50 * 1024 * 1024)) {
+    ElMessage.warning('单张图片不能超过 50 MB')
     return
   }
 

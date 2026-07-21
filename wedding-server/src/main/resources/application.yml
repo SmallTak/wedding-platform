@@ -8,7 +8,7 @@ spring:
     default: local
   servlet:
     multipart:
-      max-file-size: 30MB
+      max-file-size: 50MB
       max-request-size: 300MB
   jpa:
     open-in-view: false

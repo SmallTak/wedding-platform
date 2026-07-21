@@ -1,8 +1,10 @@
 package com.wedding.platform.platform.file;
 
+import com.wedding.platform.platform.web.ApiException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
@@ -16,7 +18,10 @@ import java.nio.file.Path;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class CollectionImageStorageServiceTests {
 
@@ -147,6 +152,29 @@ class CollectionImageStorageServiceTests {
         assertEquals(800, generated.getWidth());
         assertEquals(560, generated.getHeight());
         assertTrue(countChangedPixels(generated, new Color(130, 130, 130), 20) > 500);
+    }
+
+    @Test
+    void imageLargerThanFiftyMegabytesIsRejected() {
+        CollectionImageStorageService service = new CollectionImageStorageService(
+                storageRoot.toString(),
+                "originals",
+                "previews",
+                "thumbnails",
+                1920,
+                480,
+                2560,
+                "",
+                new BrandedImagePathResolver("originals", "branded")
+        );
+        MultipartFile upload = mock(MultipartFile.class);
+        when(upload.isEmpty()).thenReturn(false);
+        when(upload.getSize()).thenReturn(50L * 1024 * 1024 + 1);
+
+        ApiException exception = assertThrows(ApiException.class, () -> service.store(upload));
+
+        assertEquals("IMAGE_TOO_LARGE", exception.getCode());
+        assertEquals("Each image must not exceed 50 MB", exception.getMessage());
     }
 
     private byte[] jpegWithExifOrientation(int orientation) throws Exception {
