@@ -5,6 +5,7 @@ import {
   BarChart3,
   Bell,
   CircleUserRound,
+  HelpCircle,
     Images,
   Inbox,
   LayoutDashboard,
@@ -31,7 +32,6 @@ const mobileMenuOpen = ref(false)
 
 const navItems = [
   { label: '工作台', to: '/', icon: LayoutDashboard, permission: '/dashboard', route: 'dashboard' },
-  { label: '站内消息', to: '/notifications', icon: Bell, permission: '/notifications', route: 'notifications' },
   {
     label: '作品集',
     to: '/collections',
@@ -101,12 +101,6 @@ function logout() {
         >
           <component :is="item.icon" :size="18" />
           <span>{{ item.label }}</span>
-          <b
-            v-if="item.route === 'notifications' && notifications.unreadCount > 0"
-            class="console-nav-badge"
-          >
-            {{ notifications.unreadCount > 99 ? '99+' : notifications.unreadCount }}
-          </b>
         </RouterLink>
       </nav>
 
@@ -150,6 +144,9 @@ function logout() {
             <Bell :size="19" />
             <i v-if="notifications.unreadCount > 0"></i>
           </RouterLink>
+          <RouterLink class="header-icon" to="/help" aria-label="操作指引" title="操作指引">
+            <HelpCircle :size="19" />
+          </RouterLink>
           <button class="header-icon" type="button" aria-label="退出登录" title="退出登录" @click="logout">
             <LogOut :size="18" />
           </button>
@@ -166,12 +163,6 @@ function logout() {
         >
           <component :is="item.icon" :size="18" />
           <span>{{ item.label }}</span>
-          <b
-            v-if="item.route === 'notifications' && notifications.unreadCount > 0"
-            class="console-nav-badge"
-          >
-            {{ notifications.unreadCount > 99 ? '99+' : notifications.unreadCount }}
-          </b>
         </RouterLink>
       </nav>
 

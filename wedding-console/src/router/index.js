@@ -93,6 +93,12 @@ const router = createRouter({
           component: () => import('../views/AnalyticsView.vue'),
           meta: { title: '数据统计', permission: '/analytics' },
         },
+        {
+          path: 'help',
+          name: 'help',
+          component: () => import('../views/HelpView.vue'),
+          meta: { title: '操作指引' },
+        },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },

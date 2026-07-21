@@ -3875,3 +3875,122 @@ textarea {
     width: 100%;
   }
 }
+
+/* ── Help / FAQ Page ── */
+.help-content {
+  max-width: 900px;
+  margin: 0 auto;
+}
+.help-module-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 28px;
+}
+.help-module-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border: 1px solid rgba(32, 29, 26, 0.16);
+  border-radius: 999px;
+  background: #fff;
+  color: #4f4b46;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 220ms ease;
+}
+.help-module-chip:hover {
+  border-color: var(--chip-color, #8e2f38);
+  color: var(--chip-color, #8e2f38);
+}
+.help-module-chip.active {
+  background: var(--chip-color, #8e2f38);
+  border-color: var(--chip-color, #8e2f38);
+  color: #fff;
+}
+.help-module-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 28px 0 24px;
+  border-bottom: 3px solid;
+  margin-bottom: 32px;
+}
+.help-module-header h2 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 650;
+}
+.help-module-header p {
+  margin: 4px 0 0;
+  color: #756f68;
+  font-size: 14px;
+}
+.help-steps {
+  display: grid;
+  gap: 0;
+}
+.help-step {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 18px 0;
+  border-bottom: 1px solid rgba(32, 29, 26, 0.08);
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 500ms ease, transform 500ms ease;
+}
+.help-step.revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+.help-step:last-child {
+  border-bottom: none;
+}
+.help-step-marker {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: transform 300ms ease;
+}
+.help-step.revealed .help-step-marker {
+  animation: help-marker-pop 400ms ease;
+}
+@keyframes help-marker-pop {
+  0% { transform: scale(0.6); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+.help-step-body strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: #201d1a;
+  margin-bottom: 4px;
+}
+.help-step-body p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.8;
+  color: #4f4b46;
+}
+.help-step-arrow {
+  color: rgba(32, 29, 26, 0.28);
+  align-self: center;
+  flex-shrink: 0;
+  animation: help-arrow-pulse 2s infinite;
+}
+@keyframes help-arrow-pulse {
+  0%, 100% { opacity: 0.35; transform: translateX(0); }
+  50% { opacity: 0.75; transform: translateX(6px); }
+}
+
